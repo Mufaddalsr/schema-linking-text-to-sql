@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = [
+    "integration: hits a real model/network; skipped unless RUN_INTEGRATION=1",
+]

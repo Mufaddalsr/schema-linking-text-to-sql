@@ -1,0 +1,20 @@
+data:
+  spider_dir: data/spider
+  processed_dir: data/processed
+  taniguchi_splits_dir: data/spider_schema_linking/data/schema-linking/splits
+outputs:
+  predictions_dir: outputs/predictions
+  results_dir: outputs/results
+  logs_dir: outputs/logs
+linkers:
+  lexical:
+    fuzzy_threshold: 70
+embedding:
+  model_name: BAAI/bge-small-en-v1.5
+  revision: 5c38ec7c405ec4b44b94cc5a9bb96e735b38267a
+  cache_dir: data/processed/embeddings
+  tuned:
+    table_top_k: 2
+    table_threshold: 0.5
+    column_top_k: 3
+    column_threshold: 0.6

@@ -1,0 +1,24 @@
+# Data — never commit
+data/spider/
+data/bird/
+data/processed/*.json
+data/processed/embeddings/
+data/spider_schema_linking/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Outputs
+outputs/logs/*.jsonl
+outputs/predictions/*.json
+
+# Secrets
+.env
+config.local.yaml
+
+# OS
+.DS_Store
