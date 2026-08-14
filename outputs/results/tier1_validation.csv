@@ -1,0 +1,5 @@
+prediction,level,precision,recall,f1,srr,tp,fp,fn
+sqlglot_tier1,tables,0.961286,0.871523,0.914206,0.823985,1316,53,194
+sqlglot_tier1,columns,0.84139,0.945671,0.890488,0.915861,1671,315,96
+sqlglot_tier2,tables,0.94377,0.978146,0.96065,0.968085,1477,88,33
+sqlglot_tier2,columns,0.608402,0.967176,0.746941,0.946809,1709,1100,58

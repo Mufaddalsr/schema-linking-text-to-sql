@@ -1,0 +1,5 @@
+method_a,method_b,tier,element_type,n_a_only,n_b_only,n_both,n_neither,statistic,p_value
+llm_forward,graph,tier1,table,6,2,1001,25,2.0,0.2890625
+llm_forward,graph,tier1,column,12,13,935,74,0.0,1.0
+llm_forward,graph,tier2,table,6,1,1025,2,1.0,0.125
+llm_forward,graph,tier2,column,45,20,655,314,8.861538461538462,0.0029124200699637

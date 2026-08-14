@@ -1,0 +1,5 @@
+method_a,method_b,tier,element_type,n_a_only,n_b_only,n_both,n_neither,statistic,p_value
+lexical,embedding,tier1,table,122,201,617,94,18.8359133126935,1.4245931343949148e-05
+lexical,embedding,tier1,column,227,102,567,138,46.735562310030396,8.124126567144633e-12
+lexical,embedding,tier2,table,121,196,602,115,17.274447949526813,3.235080437623084e-05
+lexical,embedding,tier2,column,194,106,379,355,25.23,5.088449942024524e-07

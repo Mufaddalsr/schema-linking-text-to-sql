@@ -1,0 +1,5 @@
+method_a,method_b,tier,element_type,n_a_only,n_b_only,n_both,n_neither,statistic,p_value
+embedding,llm_forward,tier1,table,3,192,815,24,181.25128205128206,2.583567391977575e-41
+embedding,llm_forward,tier1,column,21,299,648,66,239.778125,4.396269114565493e-54
+embedding,llm_forward,tier2,table,1,234,797,2,229.03829787234042,9.66219174550604e-52
+embedding,llm_forward,tier2,column,28,243,457,306,168.9889298892989,1.2302632549686705e-38

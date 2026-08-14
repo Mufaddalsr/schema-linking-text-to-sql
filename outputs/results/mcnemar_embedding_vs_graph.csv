@@ -1,0 +1,5 @@
+method_a,method_b,tier,element_type,n_a_only,n_b_only,n_both,n_neither,statistic,p_value
+embedding,graph,tier1,table,5,190,813,26,173.62051282051283,1.1980028374401215e-39
+embedding,graph,tier1,column,15,294,654,71,250.11003236245955,2.4572630679454716e-56
+embedding,graph,tier2,table,4,232,794,4,218.34322033898306,2.0786221919261944e-49
+embedding,graph,tier2,column,26,216,459,333,147.60743801652893,5.780215727030207e-34

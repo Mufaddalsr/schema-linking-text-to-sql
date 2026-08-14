@@ -1,0 +1,5 @@
+method_a,method_b,tier,element_type,n_a_only,n_b_only,n_both,n_neither,statistic,p_value
+llm_bidirectional,graph,tier1,table,6,2,1001,25,2.0,0.2890625
+llm_bidirectional,graph,tier1,column,39,4,944,47,26.88372093023256,2.160712126553167e-07
+llm_bidirectional,graph,tier2,table,6,1,1025,2,1.0,0.125
+llm_bidirectional,graph,tier2,column,320,3,672,39,309.1517027863777,3.342114566386912e-69
