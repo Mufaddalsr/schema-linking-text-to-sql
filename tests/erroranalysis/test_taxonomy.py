@@ -72,3 +72,14 @@ def test_every_shape_has_a_definition():
 
 def test_every_cause_has_a_definition():
     assert set(CAUSE_DEFINITIONS) == set(Cause)
+
+
+def test_multi_paragraph_definitions_preserve_paragraph_breaks():
+    """The brief writes these as two paragraphs; collapsing them to a single
+    space-joined block loses the lead-sentence/qualifier structure that the
+    codebook needs to render distinctly.
+    """
+    assert "\n\n" in SHAPE_DEFINITIONS[Shape.HALL]
+    assert "\n\n" in CAUSE_DEFINITIONS[Cause.GOLD_DEFECT]
+    assert "\n\n" in CAUSE_DEFINITIONS[Cause.NAME_COLLISION]
+    assert "\n\n" in CAUSE_DEFINITIONS[Cause.SIBLING]

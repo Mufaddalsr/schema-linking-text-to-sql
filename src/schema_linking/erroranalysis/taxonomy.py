@@ -14,6 +14,7 @@ never maintained in two places.
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
@@ -40,10 +41,12 @@ SHAPE_DEFINITIONS: dict[Shape, str] = {
         "Element is predicted, exists in the schema, and is not gold for "
         "this tier."
     ),
-    Shape.HALL: (
-        "Element is predicted and does not exist in the database schema. "
-        "Takes precedence over SPUR: a predicted element absent from the "
-        "schema is never also counted as spurious."
+    Shape.HALL: inspect.cleandoc(
+        """
+        Element is predicted and does not exist in the database schema.
+
+        Takes precedence over `SPUR`: a predicted element absent from the schema is never also counted as spurious.
+        """
     ),
 }
 
@@ -70,58 +73,70 @@ class Cause(StrEnum):
 
 
 CAUSE_DEFINITIONS: dict[Cause, str] = {
-    Cause.GOLD_DEFECT: (
-        "The gold annotation, not the method, is at fault. Fires when the "
-        "gold element does not exist in the database schema; or it is "
-        "Tier-1 gold that never appears in the gold SQL string; or it is "
-        "gold, present in the schema, and missed by at least five of the "
-        "six methods. The first two clauses exclude automatically; the "
-        "third only flags for manual confirmation (design §7.3)."
+    Cause.GOLD_DEFECT: inspect.cleandoc(
+        """
+        The gold annotation, not the method, is at fault.
+
+        Fires when the gold element does not exist in the database schema; or it is Tier-1 gold that never appears in the gold SQL string; or it is gold, present in the schema, and missed by at least five of the six methods. The first two clauses exclude automatically; the third only flags for manual confirmation (design §7.3).
+        """
     ),
-    Cause.JOIN_ONLY: (
-        "In Tier-2 gold and absent from Tier-1 gold. The question never "
-        "referred to the element, so the method was not asked to find it "
-        "from the question alone. Fires on Tier-2 only."
+    Cause.JOIN_ONLY: inspect.cleandoc(
+        """
+        In Tier-2 gold and absent from Tier-1 gold.
+
+        The question never referred to the element, so the method was not asked to find it from the question alone. Fires on Tier-2 only.
+        """
     ),
     Cause.IMPLICIT_AGG: (
-        "The element is the * selector, or is required only by an "
+        "The element is the `*` selector, or is required only by an "
         "aggregate with no independent mention in the question."
     ),
-    Cause.UNVERBALISED: (
-        "Nothing in the question points at the element. No question span "
-        "matches the element name lexically (below the fuzzy threshold) "
-        "and none matches it semantically (below the embedding threshold)."
+    Cause.UNVERBALISED: inspect.cleandoc(
+        """
+        Nothing in the question points at the element.
+
+        No question span matches the element name lexically (below the fuzzy threshold) and none matches it semantically (below the embedding threshold).
+        """
     ),
-    Cause.PARAPHRASE: (
-        "A semantically matching question span exists but no lexical one. "
-        "Synonym or paraphrase resolution was needed and failed. This is "
-        "v1's LM, made precise."
+    Cause.PARAPHRASE: inspect.cleandoc(
+        """
+        A semantically matching question span exists but no lexical one.
+
+        Synonym or paraphrase resolution was needed and failed. This is v1's `LM`, made precise.
+        """
     ),
-    Cause.AMBIG_LOST: (
-        "Right name, wrong table. The element name lexically matches a "
-        "question span, and the method predicted a same-canonical-named "
-        "element belonging to a different table."
+    Cause.AMBIG_LOST: inspect.cleandoc(
+        """
+        Right name, wrong table.
+
+        The element name lexically matches a question span, and the method predicted a same-canonical-named element belonging to a different table.
+        """
     ),
     Cause.UNFORCED: (
         "The element name lexically matches a question span and the "
         "method missed it with no competing prediction. An unforced "
         "error."
     ),
-    Cause.TIER_ARTEFACT: (
-        "The element is gold in the other tier. The method is correct; "
-        "the tier is strict. 543 of lexical's 3,156 Tier-1 column false "
-        "positives fall here (design §1.4)."
+    Cause.TIER_ARTEFACT: inspect.cleandoc(
+        """
+        The element is gold in the other tier.
+
+        The method is correct; the tier is strict. 543 of lexical's 3,156 Tier-1 column false positives fall here (design §1.4).
+        """
     ),
-    Cause.NAME_COLLISION: (
-        "The element shares a canonical name with a gold element "
-        "belonging to a different table. Outranks SIBLING because it is "
-        "the more specific condition: both can hold at once when the "
-        "collided-with table is itself gold."
+    Cause.NAME_COLLISION: inspect.cleandoc(
+        """
+        The element shares a canonical name with a gold element belonging to a different table.
+
+        Outranks `SIBLING` because it is the more specific condition: both can hold at once when the collided-with table is itself gold.
+        """
     ),
-    Cause.SIBLING: (
-        "Over-generation in the right neighbourhood. The element is a "
-        "column of a table that is in gold, or a table that is "
-        "foreign-key-adjacent to a gold table."
+    Cause.SIBLING: inspect.cleandoc(
+        """
+        Over-generation in the right neighbourhood.
+
+        The element is a column of a table that is in gold, or a table that is foreign-key-adjacent to a gold table.
+        """
     ),
     Cause.QUESTION_ANCHORED: (
         "The element name lexically matches a question span but the "
@@ -142,7 +157,7 @@ CAUSE_DEFINITIONS: dict[Cause, str] = {
     ),
     Cause.FABRICATED: "The predicted name appears in no Spider schema at all.",
     Cause.UNRESOLVED: (
-        "No rule matched. Exported to residual_review.csv for human "
+        "No rule matched. Exported to `residual_review.csv` for human "
         "adjudication; never assigned silently."
     ),
 }
