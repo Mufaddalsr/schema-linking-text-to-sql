@@ -131,6 +131,18 @@ def test_allowlisted_causes_really_do_have_zero_rows(coded):
         )
 
 
+def test_incidence_matches_the_design_measurement():
+    """Design §1.4, measured during design against the real files."""
+    from schema_linking.erroranalysis.incidence import build_incidence
+
+    corpus = load_corpus("dev")
+    inc = build_incidence(corpus, tier="tier1")
+    columns = inc[inc.level == "column"]
+    assert len(columns) == 1767
+    assert int((columns.n_found == 0).sum()) == 18
+    assert int((columns.n_found == 1).sum()) == 23
+
+
 def test_print_the_final_coverage(coded, capsys):
     with capsys.disabled():
         print("\n=== full cascade coverage ===")
