@@ -9,11 +9,17 @@ judgement enters.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
 from schema_linking.erroranalysis.facts import CaseFacts
 from schema_linking.erroranalysis.taxonomy import Element, ErrorInstance, Shape
+
+if TYPE_CHECKING:
+    from schema_linking.erroranalysis.facts import SemanticScorer
+    from schema_linking.erroranalysis.loading import Corpus
+    from schema_linking.utils.config import Config
 
 METHODS: tuple[str, ...] = (
     "lexical",
@@ -186,3 +192,102 @@ def add_schema_size_bin(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.drop(columns=["schema_size_bin"]).merge(
         per_db[["db_id", "schema_size_bin"]], on="db_id", how="left"
     )[list(CENSUS_COLUMNS)]
+
+
+def build_facts(
+    corpus: "Corpus",
+    method: str,
+    scorer: "SemanticScorer",
+    cfg: "Config",
+) -> dict[int, CaseFacts]:
+    """Build a :class:`CaseFacts` per question for one method.
+
+    Scores are computed over the union of gold and predicted elements that
+    actually exist in the schema — scoring every element of every schema
+    would be wasteful, and hallucinated predictions must be screened out
+    first: :func:`~schema_linking.erroranalysis.scoring.lexical_scores`
+    raises ``KeyError`` for an element absent from the schema.
+    """
+    from schema_linking.erroranalysis.facts import build_case_facts
+    from schema_linking.erroranalysis.scoring import lexical_scores
+
+    out: dict[int, CaseFacts] = {}
+    for example in corpus.examples:
+        qid = example.question_id
+        schema = corpus.schemas[example.db_id]
+        bare = build_case_facts(
+            question_id=qid,
+            question=example.question,
+            gold_sql=example.query,
+            schema=schema,
+            gold_tier1_raw=corpus.gold_tier1[qid],
+            gold_tier2_raw=corpus.gold_tier2[qid],
+            predicted_raw=corpus.predictions[method][qid],
+            hardness=corpus.hardness[qid],
+            index=corpus.indices[example.db_id],
+        )
+        scorable = sorted(
+            {
+                el
+                for el in (bare.gold_tier1 | bare.gold_tier2 | bare.predicted)
+                if el.level == "table"
+                and el.table in bare.index.tables
+                or el.level == "column"
+                and el in bare.index.columns
+            },
+            key=lambda e: (e.level, e.render()),
+        )
+        out[qid] = build_case_facts(
+            question_id=qid,
+            question=example.question,
+            gold_sql=example.query,
+            schema=schema,
+            gold_tier1_raw=corpus.gold_tier1[qid],
+            gold_tier2_raw=corpus.gold_tier2[qid],
+            predicted_raw=corpus.predictions[method][qid],
+            hardness=corpus.hardness[qid],
+            index=corpus.indices[example.db_id],
+            lexical_scores=lexical_scores(example.question, scorable, schema),
+            semantic_scores=scorer.score(example.question, scorable),
+        )
+    return out
+
+
+def build_census(
+    corpus: "Corpus",
+    scorer: "SemanticScorer",
+    cfg: "Config",
+    methods: Sequence[str] = METHODS,
+) -> pd.DataFrame:
+    """Enumerate the full census for a corpus.
+
+    Parameters
+    ----------
+    corpus
+        Everything loaded by :func:`schema_linking.erroranalysis.loading.load_corpus`.
+    scorer
+        Semantic scorer, e.g. :class:`~schema_linking.erroranalysis.scoring.NullSemanticScorer`
+        or :class:`~schema_linking.erroranalysis.scoring.EmbeddingSemanticScorer`.
+    cfg
+        Project configuration, forwarded to :func:`build_facts`.
+    methods
+        Methods to census. Defaults to all six.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per error instance, with :data:`CENSUS_COLUMNS`.
+        ``cause`` is empty — see :func:`rules.classify_census`.
+    """
+    frames = []
+    for method in methods:
+        facts_by_qid = build_facts(corpus, method, scorer, cfg)
+        errors = [
+            err
+            for tier in TIERS
+            for facts in facts_by_qid.values()
+            for err in enumerate_errors(facts, method, tier)
+        ]
+        frames.append(errors_to_frame(errors, facts_by_qid))
+    frame = pd.concat(frames, ignore_index=True)
+    return add_schema_size_bin(frame)
