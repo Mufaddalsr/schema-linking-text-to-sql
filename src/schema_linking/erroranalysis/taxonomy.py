@@ -87,9 +87,21 @@ CAUSE_DEFINITIONS: dict[Cause, str] = {
         The question never referred to the element, so the method was not asked to find it from the question alone. Fires on Tier-2 only.
         """
     ),
-    Cause.IMPLICIT_AGG: (
-        "The element is the `*` selector, or is required only by an "
-        "aggregate with no independent mention in the question."
+    Cause.IMPLICIT_AGG: inspect.cleandoc(
+        """
+        The element is the `*` selector.
+
+        Narrowed from the original design, which also promised an
+        aggregate-without-independent-mention clause (e.g. `COUNT(*)`
+        forcing a table with no other question anchor). That clause was
+        considered and dropped: it needs an aggregate marker that
+        `schema_linking.utils.sql_parsing.column_roles` does not expose
+        (only SELECT / WHERE / GROUP_BY / HAVING / ORDER_BY / JOIN_ON /
+        OTHER), and adding one means AST work in a module the gold-link
+        extractor and the Tier-2 gold both depend on — out of scope for one
+        taxonomy sub-clause. `aggregate_only` implements the `*`-selector
+        clause only.
+        """
     ),
     Cause.UNVERBALISED: inspect.cleandoc(
         """
