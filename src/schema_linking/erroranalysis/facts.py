@@ -80,12 +80,11 @@ class SchemaIndex:
 
         graph = build_schema_graph(schema)
         adjacency = {
-            t: frozenset(
-                Element.table_el(n).table for n in graph.neighbors(t)
+            Element.table_el(table.original_name).table: frozenset(
+                Element.table_el(neighbor).table
+                for neighbor in graph.neighbors(table.original_name)
             )
-            if t in graph
-            else frozenset()
-            for t in by_table
+            for table in schema.tables
         }
 
         return cls(
@@ -194,6 +193,24 @@ def build_case_facts(
 
     Parameters
     ----------
+    question_id
+        Spider dev index for this question.
+    question
+        The natural-language question text.
+    gold_sql
+        The gold SQL query string, used by the ``GOLD-DEFECT`` and
+        ``IMPLICIT-AGG`` rules.
+    schema
+        The parsed :class:`~schema_linking.schema_parser.Schema` for this
+        question's database.
+    gold_tier1_raw, gold_tier2_raw
+        Raw gold-link records, shaped
+        ``{"tables": [...], "columns": [[table, col], ...]}``.
+    predicted_raw
+        Raw predicted-link record from one method, same shape as the gold
+        records.
+    hardness
+        Spider hardness label from ``utils.difficulty.eval_hardness``.
     index
         Prebuilt :class:`SchemaIndex`. Pass one when looping over a split so
         the index is built once per database rather than once per question.

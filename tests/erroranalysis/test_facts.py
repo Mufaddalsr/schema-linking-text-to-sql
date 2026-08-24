@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
+import pytest
+
 from schema_linking.erroranalysis.facts import (
+    CaseFacts,
     SchemaIndex,
     build_case_facts,
     elements_from_record,
 )
 from schema_linking.erroranalysis.taxonomy import Element
+from schema_linking.schema_parser import Column, FKPair, Schema, Table
+
+
+def _col(name: str, original: str, table: str, *, pk: bool = False) -> Column:
+    return Column(
+        name=name,
+        original_name=original,
+        type="text",
+        table_name=table,
+        is_primary_key=pk,
+    )
 
 
 def test_schema_index_collects_canonical_tables(mini_schema):
@@ -49,6 +63,41 @@ def test_fk_adjacency_is_symmetric(mini_schema):
 def test_fk_adjacency_of_isolated_table_is_empty(other_schema):
     idx = SchemaIndex.build(other_schema)
     assert idx.fk_adjacent["flights"] == frozenset()
+
+
+def test_fk_adjacency_is_symmetric_for_mixed_case_table_names():
+    """Regression: table original_name may not be lowercase (e.g. "Singer").
+
+    build_schema_graph keys its nodes by the raw, uncanonicalised
+    original_name. SchemaIndex.build must canonicalise on the way out, not
+    look the raw name up under its canonical form.
+    """
+    singer = Table(
+        name="singer",
+        original_name="Singer",
+        columns=[
+            _col("singer id", "Singer_ID", "Singer", pk=True),
+            _col("name", "Name", "Singer"),
+        ],
+    )
+    concert = Table(
+        name="concert",
+        original_name="Concert",
+        columns=[
+            _col("concert id", "Concert_ID", "Concert", pk=True),
+            _col("singer id", "Singer_ID", "Concert"),
+        ],
+    )
+    schema = Schema(
+        db_id="mixed_case_db",
+        tables=[singer, concert],
+        foreign_keys=[FKPair(from_col_idx=4, to_col_idx=1)],
+    )
+
+    idx = SchemaIndex.build(schema)
+
+    assert idx.fk_adjacent["singer"] == {"concert"}
+    assert idx.fk_adjacent["concert"] == {"singer"}
 
 
 def test_elements_from_record_canonicalises_mixed_case():
@@ -130,3 +179,18 @@ def test_other_tier_gold_is_the_complement(mini_schema):
     facts = _facts(mini_schema)
     assert facts.other_tier("tier1") == "tier2"
     assert facts.other_tier("tier2") == "tier1"
+
+
+def test_gold_for_raises_on_unknown_tier(mini_schema):
+    facts = _facts(mini_schema)
+    with pytest.raises(ValueError):
+        facts.gold_for("tier3")
+
+
+def test_other_tier_raises_on_unknown_tier():
+    with pytest.raises(ValueError):
+        CaseFacts.other_tier("tier3")
+
+
+def test_elements_from_record_of_empty_record_is_empty_set():
+    assert elements_from_record({"tables": [], "columns": []}) == frozenset()
