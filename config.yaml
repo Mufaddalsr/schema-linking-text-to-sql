@@ -18,3 +18,7 @@ embedding:
     table_threshold: 0.5
     column_top_k: 3
     column_threshold: 0.6
+error_analysis:
+  lexical_threshold: 70
+  semantic_threshold: 0.55
+  gold_defect_min_methods: 5

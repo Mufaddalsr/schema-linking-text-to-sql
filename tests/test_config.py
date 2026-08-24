@@ -108,3 +108,52 @@ def test_missing_section_raises_KeyError(tmp_path: Path) -> None:
 def test_default_path_is_repo_root_config_yaml() -> None:
     assert DEFAULT_CONFIG_PATH.name == "config.yaml"
     assert DEFAULT_CONFIG_PATH.is_file()
+
+
+def test_error_analysis_defaults_when_section_absent(tmp_path):
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text(
+        "data:\n"
+        "  spider_dir: data/spider\n"
+        "  processed_dir: data/processed\n"
+        "  taniguchi_splits_dir: data/tani\n"
+        "outputs:\n"
+        "  predictions_dir: outputs/predictions\n"
+        "  results_dir: outputs/results\n"
+        "  logs_dir: outputs/logs\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(cfg_file)
+    assert cfg.error_analysis.lexical_threshold == 70
+    assert cfg.error_analysis.semantic_threshold == 0.55
+    assert cfg.error_analysis.gold_defect_min_methods == 5
+
+
+def test_error_analysis_reads_overrides(tmp_path):
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text(
+        "data:\n"
+        "  spider_dir: data/spider\n"
+        "  processed_dir: data/processed\n"
+        "  taniguchi_splits_dir: data/tani\n"
+        "outputs:\n"
+        "  predictions_dir: outputs/predictions\n"
+        "  results_dir: outputs/results\n"
+        "  logs_dir: outputs/logs\n"
+        "error_analysis:\n"
+        "  lexical_threshold: 85\n"
+        "  semantic_threshold: 0.7\n"
+        "  gold_defect_min_methods: 6\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(cfg_file)
+    assert cfg.error_analysis.lexical_threshold == 85
+    assert cfg.error_analysis.semantic_threshold == pytest.approx(0.7)
+    assert cfg.error_analysis.gold_defect_min_methods == 6
+
+
+def test_real_config_yaml_has_error_analysis_section():
+    """The committed config must carry the locked operating point."""
+    cfg = load_config()
+    assert 0 <= cfg.error_analysis.lexical_threshold <= 100
+    assert 0.0 <= cfg.error_analysis.semantic_threshold <= 1.0

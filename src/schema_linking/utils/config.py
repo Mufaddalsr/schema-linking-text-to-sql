@@ -27,6 +27,10 @@ _EMBEDDING_MODEL_NAME_DEFAULT: str = "BAAI/bge-small-en-v1.5"
 _EMBEDDING_REVISION_DEFAULT: str = "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a"
 _EMBEDDING_CACHE_DIR_DEFAULT: str = "data/processed/embeddings"
 
+_ERROR_ANALYSIS_LEXICAL_THRESHOLD_DEFAULT: int = 70
+_ERROR_ANALYSIS_SEMANTIC_THRESHOLD_DEFAULT: float = 0.55
+_ERROR_ANALYSIS_GOLD_DEFECT_MIN_METHODS_DEFAULT: int = 5
+
 _REPO_ROOT: Path = Path(__file__).resolve().parents[3]
 DEFAULT_CONFIG_PATH: Path = _REPO_ROOT / "config.yaml"
 
@@ -129,6 +133,37 @@ class EmbeddingConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ErrorAnalysisConfig:
+    """Thresholds for the error-analysis rule cascade.
+
+    Attributes
+    ----------
+    lexical_threshold
+        rapidfuzz ``partial_ratio`` cutoff in ``[0, 100]``. A schema element
+        whose name scores at or above this against some question span counts
+        as lexically anchored. Separates ``UNFORCED`` / ``AMBIG-LOST`` from
+        ``PARAPHRASE`` / ``UNVERBALISED``.
+    semantic_threshold
+        Cosine-similarity cutoff in ``[0, 1]`` between the question and the
+        element's rendered text. Separates ``PARAPHRASE`` from
+        ``UNVERBALISED``.
+    gold_defect_min_methods
+        Number of the six methods that must miss a gold element before it is
+        flagged ``GOLD-DEFECT`` for manual confirmation.
+
+    Notes
+    -----
+    The two thresholds are swept in ``err_threshold_sweep.csv``; the values
+    committed here are the chosen operating point. See
+    ``docs/error_analysis_design.md`` §7.2.
+    """
+
+    lexical_threshold: int = _ERROR_ANALYSIS_LEXICAL_THRESHOLD_DEFAULT
+    semantic_threshold: float = _ERROR_ANALYSIS_SEMANTIC_THRESHOLD_DEFAULT
+    gold_defect_min_methods: int = _ERROR_ANALYSIS_GOLD_DEFECT_MIN_METHODS_DEFAULT
+
+
+@dataclass(frozen=True, slots=True)
 class Config:
     """Top-level project configuration."""
 
@@ -136,6 +171,7 @@ class Config:
     outputs: OutputsConfig
     linkers: LinkersConfig = field(default_factory=LinkersConfig)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+    error_analysis: ErrorAnalysisConfig = field(default_factory=ErrorAnalysisConfig)
 
 
 def load_config(path: Path | None = None) -> Config:
@@ -184,7 +220,14 @@ def load_config(path: Path | None = None) -> Config:
     )
     linkers = _parse_linkers(raw.get("linkers"))
     embedding = _parse_embedding(base, raw.get("embedding"))
-    return Config(data=data, outputs=outputs, linkers=linkers, embedding=embedding)
+    error_analysis = _parse_error_analysis(raw.get("error_analysis"))
+    return Config(
+        data=data,
+        outputs=outputs,
+        linkers=linkers,
+        embedding=embedding,
+        error_analysis=error_analysis,
+    )
 
 
 def _parse_linkers(raw: Any) -> LinkersConfig:
@@ -228,6 +271,29 @@ def _parse_tuned_embedding(raw: Any) -> TunedEmbeddingConfig | None:
         table_threshold=float(raw["table_threshold"]),
         column_top_k=int(raw["column_top_k"]),
         column_threshold=float(raw["column_threshold"]),
+    )
+
+
+def _parse_error_analysis(raw: Any) -> ErrorAnalysisConfig:
+    """Parse the optional ``error_analysis`` YAML section.
+
+    Missing section or missing keys fall back to dataclass defaults.
+    """
+    if not isinstance(raw, dict):
+        return ErrorAnalysisConfig()
+    return ErrorAnalysisConfig(
+        lexical_threshold=int(
+            raw.get("lexical_threshold", _ERROR_ANALYSIS_LEXICAL_THRESHOLD_DEFAULT)
+        ),
+        semantic_threshold=float(
+            raw.get("semantic_threshold", _ERROR_ANALYSIS_SEMANTIC_THRESHOLD_DEFAULT)
+        ),
+        gold_defect_min_methods=int(
+            raw.get(
+                "gold_defect_min_methods",
+                _ERROR_ANALYSIS_GOLD_DEFECT_MIN_METHODS_DEFAULT,
+            )
+        ),
     )
 
 
