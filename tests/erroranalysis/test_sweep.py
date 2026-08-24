@@ -83,6 +83,78 @@ def test_stability_summary_reports_range_per_cause(mini_schema):
     assert (summary["range"] >= 0).all()
 
 
+def test_stability_summary_zero_fills_cells_where_a_cause_is_absent():
+    """A cause present in one cell of several must not read as stable.
+
+    ``sweep_thresholds`` never emits a row for ``(cell, cause)`` when the
+    cause has zero rows in that cell (``value_counts`` omits zero counts).
+    ``RARE`` occurs in only 1 of the 3 cells below, with a large share
+    there; its true minimum share across the grid is 0.0, not the smallest
+    *observed* share. Before the zero-fill fix, ``stability_summary``
+    computed ``min_share``/``max_share`` only over the rows that exist,
+    so a cause present in a single cell reported ``range == 0.0`` — the
+    most "stable" possible value — which is the opposite of the truth.
+    """
+    sweep = pd.DataFrame(
+        [
+            {
+                "lexical_threshold": 50,
+                "semantic_threshold": 0.5,
+                "cause": "RARE",
+                "n": 9,
+                "share": 0.9,
+            },
+            {
+                "lexical_threshold": 50,
+                "semantic_threshold": 0.5,
+                "cause": "COMMON",
+                "n": 1,
+                "share": 0.1,
+            },
+            {
+                "lexical_threshold": 60,
+                "semantic_threshold": 0.5,
+                "cause": "COMMON",
+                "n": 10,
+                "share": 1.0,
+            },
+            {
+                "lexical_threshold": 70,
+                "semantic_threshold": 0.5,
+                "cause": "COMMON",
+                "n": 10,
+                "share": 1.0,
+            },
+        ]
+    )
+    summary = stability_summary(sweep)
+    rare = summary[summary.cause == "RARE"].iloc[0]
+    assert rare.n_cells_present == 1
+    assert rare.min_share == 0.0
+    assert rare.max_share == 0.9
+    assert rare.range == 0.9
+
+
+def test_stability_summary_min_share_is_zero_whenever_a_cause_is_absent_somewhere(
+    mini_schema,
+):
+    """Invariant: absent from any cell implies a true minimum of 0.0.
+
+    Over the full documented grid, this fixture's single error row is
+    coded as exactly one cause per cell (25 cells total), so every cause
+    that appears is necessarily missing from at least one other cell —
+    none can have ``n_cells_present == 25``. Each must therefore report
+    ``min_share == 0.0``.
+    """
+    frame, facts, ctx = _setup(mini_schema)
+    sweep = sweep_thresholds(frame, facts, ctx, LEXICAL_GRID, SEMANTIC_GRID)
+    summary = stability_summary(sweep)
+    total_cells = len(LEXICAL_GRID) * len(SEMANTIC_GRID)
+    partial = summary[summary["n_cells_present"] < total_cells]
+    assert not partial.empty
+    assert (partial["min_share"] == 0.0).all()
+
+
 def test_grids_are_the_documented_ones():
     assert LEXICAL_GRID == (50, 60, 70, 80, 90)
     assert SEMANTIC_GRID == (0.35, 0.45, 0.55, 0.65, 0.75)

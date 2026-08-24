@@ -75,17 +75,61 @@ def sweep_thresholds(
 
 
 def stability_summary(sweep: pd.DataFrame) -> pd.DataFrame:
-    """How much each cause's share moves across the grid.
+    """How much each cause's share moves across the full grid.
 
-    A cause with a near-zero ``range`` is threshold-independent and can be
-    reported without qualification. A wide ``range`` must be reported with
-    the sweep alongside it.
+    ``sweep_thresholds`` omits a row for ``(cell, cause)`` whenever the
+    cause has zero rows in that cell — ``value_counts`` never emits zero
+    counts. Left as-is, aggregating only the rows that exist understates
+    ``range`` for any cause absent from at least one cell: its true minimum
+    share there is ``0.0``, not the smallest *observed* non-zero share. A
+    cause that only ever appears in a single cell would then report
+    ``range == 0.0`` — the smallest possible value — and sort to the
+    bottom of the table as the most "stable" cause, when a share that goes
+    from 0 in every other cell to something nonzero in that one cell is in
+    fact maximally volatile. This function zero-fills every ``(cell,
+    cause)`` combination absent from ``sweep`` before computing
+    ``min_share``/``max_share``, so ``range`` reflects the true swing
+    across the whole grid.
+
+    Parameters
+    ----------
+    sweep
+        Output of :func:`sweep_thresholds`: one row per
+        ``(lexical_threshold, semantic_threshold, cause)`` triple that
+        actually occurred, with a ``share`` column.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per cause, with columns ``cause``, ``min_share``,
+        ``max_share``, ``range`` (``max_share - min_share``, computed after
+        zero-filling absent cells) and ``n_cells_present`` (the number of
+        grid cells where the cause actually has a nonzero row — *not*
+        inflated by the zero-fill; it still means "cells this cause was
+        observed in"). Sorted by ``range`` descending, so the most
+        threshold-sensitive causes sort first. Any cause with
+        ``n_cells_present`` below the total number of grid cells is, by
+        construction, absent from at least one cell, so its ``min_share``
+        is always ``0.0``.
     """
-    grouped = sweep.groupby("cause", as_index=False).agg(
+    cells = sweep[["lexical_threshold", "semantic_threshold"]].drop_duplicates()
+    causes = pd.DataFrame({"cause": sweep["cause"].unique()})
+    full_grid = cells.merge(causes, how="cross")
+    filled = full_grid.merge(
+        sweep[["lexical_threshold", "semantic_threshold", "cause", "share"]],
+        on=["lexical_threshold", "semantic_threshold", "cause"],
+        how="left",
+    )
+    filled["share"] = filled["share"].fillna(0.0)
+
+    n_cells_present = (
+        sweep.groupby("cause")["share"].size().rename("n_cells_present")
+    )
+    grouped = filled.groupby("cause", as_index=False).agg(
         min_share=("share", "min"),
         max_share=("share", "max"),
-        n_cells_present=("share", "size"),
     )
+    grouped = grouped.merge(n_cells_present, on="cause", how="left")
     return grouped.assign(
         range=grouped["max_share"] - grouped["min_share"]
     ).sort_values("range", ascending=False, ignore_index=True)
