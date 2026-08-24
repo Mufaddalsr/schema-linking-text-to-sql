@@ -13,9 +13,9 @@ Precedence is data, not control flow: it lives in
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import pandas as pd
 
@@ -28,6 +28,9 @@ from schema_linking.erroranalysis.taxonomy import (
     Shape,
 )
 from schema_linking.utils.config import ErrorAnalysisConfig
+
+if TYPE_CHECKING:
+    from schema_linking.erroranalysis.loading import Corpus
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,3 +278,135 @@ def classify(
         if verdict is not None:
             return verdict
     return _UNRESOLVED
+
+
+# ---------------------------------------------------------------------------
+# Applying the cascade to a whole census
+# ---------------------------------------------------------------------------
+
+
+def _evidence_str(evidence: Evidence) -> str:
+    """Render evidence as ``key=value`` pairs, semicolon-separated.
+
+    Chosen over JSON so the ``evidence`` column stays readable in a
+    spreadsheet during residual adjudication.
+    """
+    return "; ".join(f"{k}={v}" for k, v in evidence.items())
+
+
+def build_context(
+    corpus: "Corpus",
+    census: pd.DataFrame,
+    cfg: ErrorAnalysisConfig,
+) -> CascadeContext:
+    """Assemble the cross-case information the cascade needs.
+
+    ``missed_by_count`` is derived from the census itself: for each
+    ``(tier, question_id, element)``, how many of the six methods produced a
+    ``MISS``. ``gold_sql_elements`` is parsed once per question with
+    :func:`schema_linking.utils.sql_parsing.extract_schema_references`.
+
+    Notes
+    -----
+    The brief names ``extract_schema_elements``, which does not exist. The
+    real function (also used by the Tier-2 gold extractor,
+    ``gold_link_extractor.extract_tier2``) is ``extract_schema_references``,
+    called with ``strict=True`` since this is gold SQL: it returns
+    ``(SchemaReferences, list[ParseIssue])`` where ``SchemaReferences`` has
+    ``.tables: tuple[str, ...]`` and ``.columns: tuple[tuple[str, str], ...]``,
+    both in original schema case. The ``issues`` list is intentionally
+    unbound below — ``strict=True`` already drops unknown tables/columns,
+    and this is not the place to re-litigate parse diagnostics.
+    """
+    from schema_linking.utils.sql_parsing import extract_schema_references
+
+    misses = census[census.shape_code == "MISS"]
+    counts: dict[tuple[str, int, Element], int] = {}
+    for tier, qid, level, rendered in zip(
+        misses.tier, misses.question_id, misses.level, misses.element, strict=True
+    ):
+        el = (
+            Element.table_el(rendered)
+            if level == "table"
+            else Element.column_el(*rendered.split(".", 1))
+        )
+        key = (tier, int(qid), el)
+        counts[key] = counts.get(key, 0) + 1
+
+    sql_elements: dict[int, frozenset[Element]] = {}
+    for example in corpus.examples:
+        refs, _issues = extract_schema_references(
+            example.query, corpus.schemas[example.db_id], strict=True
+        )
+        sql_elements[example.question_id] = frozenset(
+            (
+                *(Element.table_el(t) for t in refs.tables),
+                *(Element.column_el(t, c) for t, c in refs.columns),
+            )
+        )
+
+    return CascadeContext(
+        cfg=cfg, missed_by_count=counts, gold_sql_elements=sql_elements
+    )
+
+
+def classify_census(
+    census: pd.DataFrame,
+    facts_by_method: Mapping[str, Mapping[int, CaseFacts]],
+    ctx: CascadeContext,
+) -> pd.DataFrame:
+    """Fill ``cause``, ``rule_name`` and ``evidence`` for every census row.
+
+    Parameters
+    ----------
+    census
+        Frame from :func:`census.build_census`, with an empty ``cause``.
+    facts_by_method
+        ``{method: {question_id: CaseFacts}}`` — the same bundles the census
+        was enumerated from.
+    ctx
+        From :func:`build_context`.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A copy with the three columns filled. Row order and count unchanged.
+    """
+    causes, names, evidences = [], [], []
+    for row in census.itertuples(index=False):
+        element = (
+            Element.table_el(row.element)
+            if row.level == "table"
+            else Element.column_el(*row.element.split(".", 1))
+        )
+        err = ErrorInstance(
+            question_id=int(row.question_id),
+            db_id=row.db_id,
+            method=row.method,
+            tier=row.tier,
+            element=element,
+            shape=Shape(row.shape_code),
+        )
+        facts = facts_by_method[row.method][int(row.question_id)]
+        verdict = classify(err, facts, ctx)
+        causes.append(str(verdict.cause))
+        names.append(verdict.rule_name)
+        evidences.append(_evidence_str(verdict.evidence))
+    return census.assign(cause=causes, rule_name=names, evidence=evidences)
+
+
+def coverage_report(census: pd.DataFrame) -> pd.DataFrame:
+    """Count and share of each (shape, cause) pair.
+
+    The ``UNRESOLVED`` share is the number that decides whether the cascade
+    is complete enough to proceed.
+    """
+    if census.empty:
+        return pd.DataFrame(columns=["shape_code", "cause", "n", "share"])
+    report = (
+        census.groupby(["shape_code", "cause"], as_index=False)
+        .size()
+        .rename(columns={"size": "n"})
+        .sort_values("n", ascending=False, ignore_index=True)
+    )
+    return report.assign(share=report["n"] / report["n"].sum())
