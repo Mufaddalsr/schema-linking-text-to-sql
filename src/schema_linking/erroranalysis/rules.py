@@ -107,14 +107,23 @@ def _rule(cause: Cause):
 def gold_element_not_in_schema(
     err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
 ) -> Verdict | None:
-    """Gold names an element the database does not have."""
+    """Gold names an element the database does not have.
+
+    The ``*`` selector is exempt: ``schema_parser`` deliberately excludes it
+    from every :class:`~schema_linking.schema_parser.Schema` (it is a
+    syntactic SQL construct, not a schema element), so it can never satisfy
+    a literal column-membership check. For a ``*`` element this rule falls
+    back to checking that its table exists, which is the only defect that
+    clause can meaningfully catch.
+    """
     if err.shape is not Shape.MISS:
         return None
-    present = (
-        err.element.table in facts.index.tables
-        if err.element.level == "table"
-        else err.element in facts.index.columns
-    )
+    if err.element.level == "table":
+        present = err.element.table in facts.index.tables
+    elif err.element.column == "*":
+        present = err.element.table in facts.index.tables
+    else:
+        present = err.element in facts.index.columns
     if present:
         return None
     return Verdict(
@@ -241,17 +250,138 @@ def adjacent_to_gold(
     return None
 
 
+def _lexically_anchored(el: Element, facts: CaseFacts, ctx: CascadeContext) -> bool:
+    """Whether a question span surface-matches ``el`` at or above threshold."""
+    return facts.lexical_scores.get(el, 0) >= ctx.cfg.lexical_threshold
+
+
+def _semantically_anchored(el: Element, facts: CaseFacts, ctx: CascadeContext) -> bool:
+    """Whether the question embeds close to ``el`` at or above threshold."""
+    return facts.semantic_scores.get(el, 0.0) >= ctx.cfg.semantic_threshold
+
+
+@_rule(Cause.IMPLICIT_AGG)
+def aggregate_only(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
+    """The element is the ``*`` selector.
+
+    Spider's ``*`` is a syntactic construct rather than a schema element
+    (see ``schema_parser`` module docstring), so a method cannot reasonably
+    be asked to link it.
+    """
+    if err.shape is not Shape.MISS or err.element.column != "*":
+        return None
+    return Verdict(
+        Cause.IMPLICIT_AGG, "aggregate_only", {"element": err.element.render()}
+    )
+
+
+@_rule(Cause.AMBIG_LOST)
+def same_name_other_table_predicted(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
+    """Right name, wrong table: the method predicted a same-named sibling."""
+    if err.shape is not Shape.MISS or err.element.level != "column":
+        return None
+    if not _lexically_anchored(err.element, facts, ctx):
+        return None
+    competitors = {
+        el
+        for el in facts.index.columns_by_name.get(err.element.column, frozenset())
+        if el != err.element and el in facts.predicted
+    }
+    if not competitors:
+        return None
+    chosen = sorted(competitors, key=lambda e: e.render())[0]
+    return Verdict(
+        Cause.AMBIG_LOST,
+        "same_name_other_table_predicted",
+        {
+            "element": err.element.render(),
+            "predicted_instead": chosen.render(),
+            "lexical": facts.lexical_scores.get(err.element, 0),
+        },
+    )
+
+
+@_rule(Cause.UNFORCED)
+def lexically_available(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
+    """The name is in the question and the method still missed it."""
+    if err.shape is not Shape.MISS or not _lexically_anchored(
+        err.element, facts, ctx
+    ):
+        return None
+    return Verdict(
+        Cause.UNFORCED,
+        "lexically_available",
+        {
+            "element": err.element.render(),
+            "lexical": facts.lexical_scores.get(err.element, 0),
+        },
+    )
+
+
+@_rule(Cause.PARAPHRASE)
+def semantically_available(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
+    """A semantic anchor exists but no lexical one — paraphrase resolution failed."""
+    if err.shape is not Shape.MISS or not _semantically_anchored(
+        err.element, facts, ctx
+    ):
+        return None
+    return Verdict(
+        Cause.PARAPHRASE,
+        "semantically_available",
+        {
+            "element": err.element.render(),
+            "semantic": round(facts.semantic_scores.get(err.element, 0.0), 3),
+            "lexical": facts.lexical_scores.get(err.element, 0),
+        },
+    )
+
+
+@_rule(Cause.UNVERBALISED)
+def no_anchor_in_question(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
+    """Nothing in the question points at the element, lexically or semantically.
+
+    The terminal rule for ``MISS``: reaching it means both anchoring tests
+    failed, so it fires unconditionally on any surviving miss.
+    """
+    if err.shape is not Shape.MISS:
+        return None
+    return Verdict(
+        Cause.UNVERBALISED,
+        "no_anchor_in_question",
+        {
+            "element": err.element.render(),
+            "lexical": facts.lexical_scores.get(err.element, 0),
+            "semantic": round(facts.semantic_scores.get(err.element, 0.0), 3),
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # The cascade
 # ---------------------------------------------------------------------------
 
-# SPIKE_ONLY: Tasks 9-11 extend these tuples to the full cascade.
+# SPIKE_ONLY: Task 11 extends the SPUR and HALL tuples to the full cascade.
 CASCADE: dict[Shape, tuple[Rule, ...]] = {
     Shape.MISS: (
         gold_element_not_in_schema,
         tier1_gold_absent_from_sql,
         missed_by_most_methods,
         tier2_only_gold,
+        aggregate_only,
+        same_name_other_table_predicted,
+        lexically_available,
+        semantically_available,
+        no_anchor_in_question,
     ),
     Shape.SPUR: (
         gold_in_the_other_tier,
