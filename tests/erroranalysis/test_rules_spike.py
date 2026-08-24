@@ -125,7 +125,7 @@ def test_spurious_fk_adjacent_table_is_a_sibling(mini_schema):
 
 
 def test_unrelated_spurious_element_is_unresolved_in_the_spike(mini_schema):
-    """Task 10 will code this UNANCHORED; the spike must leave it UNRESOLVED."""
+    """Task 11 codes this UNANCHORED via the now-complete SPUR cascade."""
     el = Element.column_el("concert", "Concert_ID")
     facts = _case(
         mini_schema,
@@ -134,5 +134,5 @@ def test_unrelated_spurious_element_is_unresolved_in_the_spike(mini_schema):
         pred={"tables": [], "columns": [["concert", "Concert_ID"]]},
     )
     verdict = classify(_err(facts, el, Shape.SPUR), facts, _ctx())
-    assert verdict.cause is Cause.UNRESOLVED
-    assert verdict.rule_name == ""
+    assert verdict.cause is Cause.UNANCHORED
+    assert verdict.rule_name == "no_relation_to_gold"

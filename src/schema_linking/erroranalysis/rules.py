@@ -14,7 +14,7 @@ Precedence is data, not control flow: it lives in
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
 import pandas as pd
@@ -69,11 +69,18 @@ class CascadeContext:
         ``{question_id: frozenset[Element]}`` — elements the gold SQL string
         actually references, via ``utils.sql_parsing``. Drives the gate's
         second clause.
+    all_schema_tables
+        Every database's canonical table names, keyed by ``db_id``. Lets
+        ``WRONG-DB`` be told apart from ``FABRICATED``.
+    all_schema_columns
+        Every database's canonical column elements, keyed by ``db_id``.
     """
 
     cfg: ErrorAnalysisConfig
     missed_by_count: Mapping[tuple[str, int, Element], int]
     gold_sql_elements: Mapping[int, frozenset[Element]]
+    all_schema_tables: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    all_schema_columns: Mapping[str, frozenset[Element]] = field(default_factory=dict)
 
 
 class Rule(Protocol):
@@ -214,6 +221,31 @@ def gold_in_the_other_tier(
         Cause.TIER_ARTEFACT,
         "gold_in_the_other_tier",
         {"element": err.element.render(), "gold_in": other},
+    )
+
+
+@_rule(Cause.NAME_COLLISION)
+def shares_name_with_gold(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
+    """The spurious column bears a gold column's name from a different table."""
+    if err.shape is not Shape.SPUR or err.element.level != "column":
+        return None
+    gold = facts.gold_for(err.tier)
+    collisions = {
+        el
+        for el in gold
+        if el.level == "column"
+        and el.column == err.element.column
+        and el.table != err.element.table
+    }
+    if not collisions:
+        return None
+    chosen = sorted(collisions, key=lambda e: e.render())[0]
+    return Verdict(
+        Cause.NAME_COLLISION,
+        "shares_name_with_gold",
+        {"element": err.element.render(), "collides_with": chosen.render()},
     )
 
 
@@ -366,11 +398,102 @@ def no_anchor_in_question(
     )
 
 
+@_rule(Cause.QUESTION_ANCHORED)
+def matches_question_but_not_gold(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
+    """The question mentions the element; neither tier's gold needs it."""
+    if err.shape is not Shape.SPUR or not _lexically_anchored(
+        err.element, facts, ctx
+    ):
+        return None
+    return Verdict(
+        Cause.QUESTION_ANCHORED,
+        "matches_question_but_not_gold",
+        {
+            "element": err.element.render(),
+            "lexical": facts.lexical_scores.get(err.element, 0),
+        },
+    )
+
+
+@_rule(Cause.UNANCHORED)
+def no_relation_to_gold(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
+    """Free-floating over-prediction. Terminal rule for ``SPUR``."""
+    if err.shape is not Shape.SPUR:
+        return None
+    return Verdict(
+        Cause.UNANCHORED,
+        "no_relation_to_gold",
+        {
+            "element": err.element.render(),
+            "lexical": facts.lexical_scores.get(err.element, 0),
+            "semantic": round(facts.semantic_scores.get(err.element, 0.0), 3),
+        },
+    )
+
+
+@_rule(Cause.MALFORMED)
+def structurally_invalid(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
+    """An empty or half-empty identifier — a parse failure, not a wrong guess."""
+    if err.shape is not Shape.HALL:
+        return None
+    blank = not err.element.table or (
+        err.element.level == "column" and not err.element.column
+    )
+    if not blank:
+        return None
+    return Verdict(
+        Cause.MALFORMED,
+        "structurally_invalid",
+        {"element": repr(err.element.render())},
+    )
+
+
+@_rule(Cause.WRONG_DB)
+def exists_in_another_db(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
+    """The name is real, but belongs to a different Spider database."""
+    if err.shape is not Shape.HALL:
+        return None
+    for db_id in sorted(ctx.all_schema_tables):
+        if db_id == facts.db_id:
+            continue
+        found = (
+            err.element.table in ctx.all_schema_tables[db_id]
+            if err.element.level == "table"
+            else err.element in ctx.all_schema_columns.get(db_id, frozenset())
+        )
+        if found:
+            return Verdict(
+                Cause.WRONG_DB,
+                "exists_in_another_db",
+                {"element": err.element.render(), "found_in": db_id},
+            )
+    return None
+
+
+@_rule(Cause.FABRICATED)
+def not_in_any_schema(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
+    """The name appears in no Spider schema. Terminal rule for ``HALL``."""
+    if err.shape is not Shape.HALL:
+        return None
+    return Verdict(
+        Cause.FABRICATED, "not_in_any_schema", {"element": err.element.render()}
+    )
+
+
 # ---------------------------------------------------------------------------
 # The cascade
 # ---------------------------------------------------------------------------
 
-# SPIKE_ONLY: Task 11 extends the SPUR and HALL tuples to the full cascade.
 CASCADE: dict[Shape, tuple[Rule, ...]] = {
     Shape.MISS: (
         gold_element_not_in_schema,
@@ -385,9 +508,16 @@ CASCADE: dict[Shape, tuple[Rule, ...]] = {
     ),
     Shape.SPUR: (
         gold_in_the_other_tier,
+        shares_name_with_gold,
         adjacent_to_gold,
+        matches_question_but_not_gold,
+        no_relation_to_gold,
     ),
-    Shape.HALL: (),
+    Shape.HALL: (
+        structurally_invalid,
+        exists_in_another_db,
+        not_in_any_schema,
+    ),
 }
 
 _UNRESOLVED = Verdict(Cause.UNRESOLVED, "", {})
@@ -475,8 +605,15 @@ def build_context(
             )
         )
 
+    all_tables = {db: idx.tables for db, idx in corpus.indices.items()}
+    all_columns = {db: idx.columns for db, idx in corpus.indices.items()}
+
     return CascadeContext(
-        cfg=cfg, missed_by_count=counts, gold_sql_elements=sql_elements
+        cfg=cfg,
+        missed_by_count=counts,
+        gold_sql_elements=sql_elements,
+        all_schema_tables=all_tables,
+        all_schema_columns=all_columns,
     )
 
 
