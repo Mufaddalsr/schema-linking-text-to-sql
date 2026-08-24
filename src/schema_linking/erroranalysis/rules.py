@@ -101,7 +101,9 @@ def _rule(cause: Cause):
 
 
 @_rule(Cause.GOLD_DEFECT)
-def gold_element_not_in_schema(err, facts, ctx):
+def gold_element_not_in_schema(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
     """Gold names an element the database does not have."""
     if err.shape is not Shape.MISS:
         return None
@@ -120,7 +122,9 @@ def gold_element_not_in_schema(err, facts, ctx):
 
 
 @_rule(Cause.GOLD_DEFECT)
-def tier1_gold_absent_from_sql(err, facts, ctx):
+def tier1_gold_absent_from_sql(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
     """Tier-1 claims the question mentions an element the gold SQL never uses.
 
     Tier-1 comes from Taniguchi's human annotation and Tier-2 from the SQL,
@@ -139,7 +143,9 @@ def tier1_gold_absent_from_sql(err, facts, ctx):
 
 
 @_rule(Cause.GOLD_DEFECT)
-def missed_by_most_methods(err, facts, ctx):
+def missed_by_most_methods(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
     """Nearly every method missed this gold element — suspect the gold.
 
     Flags only. ``evidence["confirmed"]`` stays ``"pending"`` until manually
@@ -169,7 +175,9 @@ def missed_by_most_methods(err, facts, ctx):
 
 
 @_rule(Cause.JOIN_ONLY)
-def tier2_only_gold(err, facts, ctx):
+def tier2_only_gold(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
     """The missed element is Tier-2 gold and not Tier-1 gold."""
     if err.shape is not Shape.MISS or err.tier != "tier2":
         return None
@@ -181,7 +189,9 @@ def tier2_only_gold(err, facts, ctx):
 
 
 @_rule(Cause.TIER_ARTEFACT)
-def gold_in_the_other_tier(err, facts, ctx):
+def gold_in_the_other_tier(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
     """The spurious element is gold under the other tier."""
     if err.shape is not Shape.SPUR:
         return None
@@ -196,7 +206,9 @@ def gold_in_the_other_tier(err, facts, ctx):
 
 
 @_rule(Cause.SIBLING)
-def adjacent_to_gold(err, facts, ctx):
+def adjacent_to_gold(
+    err: ErrorInstance, facts: CaseFacts, ctx: CascadeContext
+) -> Verdict | None:
     """Over-generation in the right neighbourhood.
 
     A spurious column belonging to a gold table, or a spurious table one

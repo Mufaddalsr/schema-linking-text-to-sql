@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from schema_linking.erroranalysis.facts import build_case_facts
-from schema_linking.erroranalysis.rules import CascadeContext, classify
+from schema_linking.erroranalysis.rules import (
+    CascadeContext,
+    classify,
+    gold_element_not_in_schema,
+    tier1_gold_absent_from_sql,
+)
 from schema_linking.erroranalysis.taxonomy import (
     Cause,
     Element,
@@ -136,3 +141,70 @@ def test_gate_does_not_apply_to_spurious_predictions(mini_schema):
         shape=Shape.SPUR,
     )
     assert classify(err, facts, _ctx()).cause is not Cause.GOLD_DEFECT
+
+
+def test_gold_element_not_in_schema_guard_rejects_spur_directly(mini_schema):
+    """The rule's own shape guard must reject SPUR, not just cascade routing.
+
+    ``CASCADE[Shape.SPUR]`` never includes this rule, so calling it through
+    ``classify`` on a SPUR error would never exercise its ``shape is not
+    MISS`` check. Calling the function directly does.
+    """
+    facts = _case(
+        mini_schema,
+        gold1={"tables": ["orchestra"], "columns": []},
+        gold2={"tables": ["orchestra"], "columns": []},
+        pred={"tables": ["singer"], "columns": []},
+    )
+    err = ErrorInstance(
+        question_id=facts.question_id,
+        db_id=facts.db_id,
+        method="lexical",
+        tier="tier1",
+        element=Element.table_el("orchestra"),
+        shape=Shape.SPUR,
+    )
+    assert gold_element_not_in_schema(err, facts, _ctx()) is None
+
+
+def test_gold_element_not_in_schema_guard_rejects_hall_directly(mini_schema):
+    """The rule's own shape guard must reject HALL, not just cascade routing.
+
+    ``CASCADE[Shape.HALL]`` is empty, so ``classify`` never even looks at
+    this rule for a HALL error. Calling the function directly proves the
+    guard itself works, not just that the cascade never reaches it.
+    """
+    facts = _case(
+        mini_schema,
+        gold1={"tables": ["orchestra"], "columns": []},
+        gold2={"tables": ["orchestra"], "columns": []},
+        pred={"tables": ["singer"], "columns": []},
+    )
+    err = ErrorInstance(
+        question_id=facts.question_id,
+        db_id=facts.db_id,
+        method="lexical",
+        tier="tier1",
+        element=Element.table_el("orchestra"),
+        shape=Shape.HALL,
+    )
+    assert gold_element_not_in_schema(err, facts, _ctx()) is None
+
+
+def test_tier1_gold_absent_from_sql_returns_none_without_a_sql_entry(mini_schema):
+    """Called directly: the rule itself must no-op absent a SQL entry.
+
+    ``ctx.gold_sql_elements`` has no key for this question (a later task
+    populates it). Asserting on the rule's return value directly, rather
+    than on what ``classify`` falls through to, proves the ``is None``
+    branch in the rule body itself, not just an emergent cascade result.
+    """
+    el = Element.column_el("concert", "Name")
+    facts = _case(
+        mini_schema,
+        gold1={"tables": ["singer"], "columns": [["concert", "Name"]]},
+        gold2={"tables": ["singer"], "columns": []},
+        pred={"tables": ["singer"], "columns": []},
+    )
+    err = _miss(facts, el)
+    assert tier1_gold_absent_from_sql(err, facts, _ctx()) is None
