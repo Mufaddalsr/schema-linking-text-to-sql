@@ -49,6 +49,28 @@ def _case_id(row: pd.Series) -> str:
     return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
 
 
+def _group_seed(seed: int, cause: str) -> int:
+    """Derive a distinct, deterministic seed for one cause's draw.
+
+    ``DataFrame.sample`` with a given ``random_state`` selects the same
+    relative row *positions* from any group of the same size, regardless of
+    the group's contents. Reusing the base ``seed`` unchanged for every
+    cause would therefore make same-sized strata draw the same positional
+    slice — e.g. always the 4th, 6th and 12th row of the group — which can
+    over- or under-represent whichever method or question-range sits at
+    that position, in every stratum at once. That would quietly bias the
+    validation sample the kappa is computed over, so each cause gets its
+    own seed instead, derived from ``(seed, cause)``.
+
+    Python's built-in ``hash()`` is deliberately not used: it is salted per
+    interpreter process, so it would break reproducibility across runs. Do
+    not "simplify" this back to a shared seed — see
+    ``test_equal_size_causes_do_not_share_relative_positions``.
+    """
+    digest = hashlib.sha256(f"{seed}|{cause}".encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big")
+
+
 def draw_validation_sample(
     census: pd.DataFrame,
     n_per_cause: int = 15,
@@ -62,6 +84,11 @@ def draw_validation_sample(
     if any cause has fewer than ``n_per_cause`` rows, since a rare cause is
     taken whole rather than padded.
 
+    Each cause is drawn with its own seed derived from ``(seed, cause)``
+    (see :func:`_group_seed`), not the base ``seed`` reused verbatim, so
+    that two equal-sized causes do not select the same relative row
+    positions.
+
     Parameters
     ----------
     census
@@ -70,7 +97,8 @@ def draw_validation_sample(
         Target per cause. A cause with fewer rows is taken whole — never
         padded, never resampled.
     seed
-        Passed to ``DataFrame.sample`` for reproducibility.
+        Base seed. Combined with each cause name for reproducibility: the
+        same ``(seed, cause)`` always draws the same rows.
 
     Returns
     -------
@@ -79,8 +107,8 @@ def draw_validation_sample(
         the sheet order carries no information about the assigned cause.
     """
     parts = [
-        group.sample(n=min(n_per_cause, len(group)), random_state=seed)
-        for _, group in census.groupby("cause", sort=True)
+        group.sample(n=min(n_per_cause, len(group)), random_state=_group_seed(seed, cause))
+        for cause, group in census.groupby("cause", sort=True)
     ]
     sample = pd.concat(parts, ignore_index=True)
     sample = sample.assign(case_id=sample.apply(_case_id, axis=1))
@@ -127,10 +155,19 @@ def write_validation_sheet(
 
 
 def _render(record: dict) -> str:
-    """Compact ``tables | table.column`` rendering for the sheet."""
+    """Compact ``tables: ... || columns: ...`` rendering for the sheet.
+
+    Either half is omitted when the record has nothing for it, rather than
+    emitting an empty trailing segment (e.g. ``"tables:  || columns: ..."``).
+    """
     tables = ", ".join(sorted(record.get("tables", ())))
     columns = ", ".join(sorted(f"{t}.{c}" for t, c in record.get("columns", ())))
-    return f"tables: {tables} || columns: {columns}"
+    parts = [
+        part
+        for part in (f"tables: {tables}" if tables else "", f"columns: {columns}" if columns else "")
+        if part
+    ]
+    return " || ".join(parts)
 
 
 def read_validation_sheet(path: Path) -> pd.DataFrame:
@@ -152,7 +189,16 @@ def read_validation_sheet(path: Path) -> pd.DataFrame:
 
 
 def _cohen_kappa(a: pd.Series, b: pd.Series) -> float:
-    """Cohen's kappa between two label series over the same cases."""
+    """Cohen's kappa between two label series over the same cases.
+
+    Raises
+    ------
+    ValueError
+        If there are no cases to compare. Kappa is undefined on an empty
+        sample; failing loud here beats a bare ``ZeroDivisionError``.
+    """
+    if len(a) == 0:
+        raise ValueError("cannot compute Cohen's kappa: no cases to compare")
     labels = sorted(set(a) | set(b))
     matrix = pd.crosstab(a, b).reindex(index=labels, columns=labels, fill_value=0)
     total = matrix.to_numpy().sum()
