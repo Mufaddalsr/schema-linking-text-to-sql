@@ -141,20 +141,48 @@ def errors_to_frame(
     return pd.DataFrame(rows, columns=list(CENSUS_COLUMNS))
 
 
+def _bin_labels(n_bins: int) -> list[str]:
+    """Quartile-style labels for ``n_bins`` bins, smallest to largest.
+
+    ``pd.qcut(..., duplicates="drop")`` can return fewer than four bins
+    when quantile-edge collisions occur — most often because many
+    databases share the same ``n_columns``. Labels are generated for
+    however many bins actually survive, rather than assuming four, so the
+    endpoints stay legible (the first always reads "smallest", the last
+    always reads "largest") no matter how far the count collapses.
+    """
+    if n_bins < 1:
+        raise ValueError(f"n_bins must be >= 1, got {n_bins}")
+    if n_bins == 1:
+        return ["Q1_smallest"]
+    labels = [f"Q{i}" for i in range(1, n_bins + 1)]
+    labels[0] += "_smallest"
+    labels[-1] += "_largest"
+    return labels
+
+
 def add_schema_size_bin(frame: pd.DataFrame) -> pd.DataFrame:
     """Add quartile bins over ``n_columns``, computed across databases.
 
     Binning is over the set of distinct ``(db_id, n_columns)`` pairs, not
     over error rows — otherwise a database with many errors would drag the
     quartile boundaries toward itself.
+
+    Quantile-edge collisions can leave fewer than four bins — e.g. every
+    database sharing the same column count, or only two or three distinct
+    counts among many databases. Rather than raising, as many bins as the
+    data supports are produced and labelled by :func:`_bin_labels`. When
+    every database has the same ``n_columns`` there is exactly one bin.
     """
     per_db = frame[["db_id", "n_columns"]].drop_duplicates()
-    labels = ["Q1_smallest", "Q2", "Q3", "Q4_largest"]
-    per_db = per_db.assign(
-        schema_size_bin=pd.qcut(
-            per_db["n_columns"], q=4, labels=labels, duplicates="drop"
-        ).astype(str)
-    )
+    if per_db["n_columns"].nunique() <= 1:
+        per_db = per_db.assign(schema_size_bin="Q1_smallest")
+    else:
+        binned = pd.qcut(per_db["n_columns"], q=4, duplicates="drop")
+        label_map = dict(
+            zip(binned.cat.categories, _bin_labels(binned.cat.categories.size))
+        )
+        per_db = per_db.assign(schema_size_bin=binned.map(label_map).astype(str))
     return frame.drop(columns=["schema_size_bin"]).merge(
         per_db[["db_id", "schema_size_bin"]], on="db_id", how="left"
     )[list(CENSUS_COLUMNS)]
