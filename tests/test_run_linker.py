@@ -470,7 +470,8 @@ def test_write_llm_cost_report_aggregates_across_phases(tmp_path: Path) -> None:
 
 
 def test_write_llm_cost_report_two_phases_share_one_file(tmp_path: Path) -> None:
-    """The exact situation Week 7 created: two phases' entries interleaved
+    """The exact situation the backward dev run created: two phases' entries
+    interleaved
     in one physical log file, distinguished only by metadata.phase."""
     shared_path = tmp_path / "shared.jsonl"
     lines = [

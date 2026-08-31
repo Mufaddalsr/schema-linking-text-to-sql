@@ -167,7 +167,7 @@ class GraphLinker:
         ``0.0`` by default.
     trace_path
         Where :meth:`predict_all` writes the mandatory per-query trace
-        JSONL (Week 9 error-analysis material). Defaults to
+        JSONL (error-analysis material). Defaults to
         ``outputs/predictions/graph_dev_traces.jsonl`` under the repo root;
         tests pass a ``tmp_path``.
     extra_metadata
@@ -405,7 +405,7 @@ class GraphLinker:
         -----------
         Overwrites :attr:`trace_path` with one JSONL line per query —
         ``{qid, db_id, question, llm_raw, endpoints_resolved, graph_result,
-        final_tables, final_columns, failure}`` — the material for Week 9
+        final_tables, final_columns, failure}`` — the material for the
         error analysis. Never skipped.
         """
         groups: dict[str, list[SpiderExample]] = {}

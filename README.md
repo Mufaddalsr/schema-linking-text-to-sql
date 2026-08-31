@@ -1,10 +1,9 @@
 # Schema Linking Thesis — `code/`
 
 Implementation of the six schema-linking methods compared in the thesis
-"Investigations into Schema Linking in Text-to-SQL". Scope, the
-twelve-week plan, and the implementation decisions behind each method are
-documented in the thesis itself; this repository holds the code,
-predictions, and results.
+"Investigations into Schema Linking in Text-to-SQL". Scope and the
+implementation decisions behind each method are documented in the thesis
+itself; this repository holds the code, predictions, and results.
 
 ## Layout
 

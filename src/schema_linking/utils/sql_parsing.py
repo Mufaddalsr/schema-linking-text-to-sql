@@ -63,7 +63,13 @@ from sqlglot.errors import SqlglotError
 
 from schema_linking.schema_parser import Schema
 
-__all__ = ["SchemaReferences", "ParseIssue", "extract_schema_references"]
+__all__ = [
+    "SchemaReferences",
+    "ParseIssue",
+    "extract_schema_references",
+    "column_roles",
+    "JOIN_ON",
+]
 
 _DIALECT = "sqlite"
 
@@ -431,3 +437,47 @@ def extract_schema_references(
         columns=tuple(sorted(w.columns_with_clauses.keys())),
     )
     return refs, w.issues
+
+
+#: Public alias for the ``JOIN ON`` clause role (see :func:`column_roles`).
+JOIN_ON: str = _CLAUSE_JOIN_ON
+
+
+def column_roles(
+    sql: str, schema: Schema, strict: bool = True
+) -> dict[tuple[str, str], frozenset[str]]:
+    """Map each resolved column to the set of SQL clauses it appears in.
+
+    This exposes the clause bookkeeping the walker already performs, so
+    callers can distinguish a column that only ever joins from one that is
+    also selected or filtered. The JO code needs exactly this distinction:
+    ``tier2 - tier1`` is *not* the join-only set, because Taniguchi left some ordinary ``WHERE`` / ``ORDER BY``
+    columns unannotated.
+
+    Parameters
+    ----------
+    sql
+        SQL text to parse (SQLite dialect).
+    schema
+        Schema to resolve identifiers against.
+    strict
+        ``True`` (the default, and correct for gold SQL): drop unknown
+        tables/columns. ``False``: keep them with their raw SQL casing.
+
+    Returns
+    -------
+    dict[tuple[str, str], frozenset[str]]
+        ``(table, column) -> {"SELECT", "WHERE", "JOIN_ON", ...}``. A column
+        whose value is exactly ``{"JOIN_ON"}`` is join-only. Returns an
+        empty mapping when the SQL does not parse.
+
+    Examples
+    --------
+    >>> roles = column_roles(sql, schema)  # doctest: +SKIP
+    >>> join_only = {c for c, r in roles.items() if r == frozenset({JOIN_ON})}
+    """
+    walked = _walk(sql, schema, strict=strict)
+    return {
+        col: frozenset(clauses)
+        for col, clauses in walked.columns_with_clauses.items()
+    }

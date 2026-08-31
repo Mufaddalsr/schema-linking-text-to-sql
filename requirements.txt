@@ -7,9 +7,10 @@ pyyaml>=6.0
 jupyter
 ipykernel
 
-# Stats (week 3 onward — McNemar's test for paired SRR, CIs on metrics)
+# Stats (McNemar's test for paired SRR, CIs on metrics)
 scipy>=1.11
 statsmodels>=0.14
+scikit-learn>=1.3   # Cohen's kappa for the inter-rater agreement pass
 
 # Fuzzy string matching (lexical linker — token-set ratio, partial ratio)
 rapidfuzz>=3.0
@@ -17,15 +18,15 @@ rapidfuzz>=3.0
 # Testing
 pytest>=7.0
 
-# Embedding linker (Method B, week 5)
+# Embedding linker (Method B)
 sentence-transformers>=3.0
 torch>=2.0        # CPU wheel is fine
 
-# LLM client (Methods C/D/E — LLM forward/backward/bidirectional, week 6+)
+# LLM client (Methods C/D/E — LLM forward/backward/bidirectional)
 anthropic>=0.40
 tenacity>=8.0
 
-# Graph linker (Method F — SchemaGraphSQL-style, week 6+)
+# Graph linker (Method F — SchemaGraphSQL-style)
 networkx>=3.0
 
 # Will add later (weeks 6+):

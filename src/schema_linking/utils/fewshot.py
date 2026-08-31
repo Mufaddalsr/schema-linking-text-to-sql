@@ -172,7 +172,7 @@ def save_fewshot_examples(
 def to_backward_fewshot_examples(
     fewshot_examples: list[dict[str, Any]], train_examples: list[SpiderExample]
 ) -> list[dict[str, Any]]:
-    """Reformat Week 6's forward few-shot picks for backward-style (Method D)
+    """Reformat the forward few-shot picks for backward-style (Method D)
     prompting, by attaching each example's gold SQL.
 
     The gold SQL comes directly from Spider train (matched by
@@ -229,7 +229,7 @@ def save_backward_fewshot_examples(
 def to_graph_fewshot_examples(
     fewshot_examples: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Reformat Week 6's forward few-shot picks for the graph endpoint prompt
+    """Reformat the forward few-shot picks for the graph endpoint prompt
     (Method F, ``GRAPH_ENDPOINT_V1``), renaming ``tables`` to ``core_tables``.
 
     Tier-1 ("Mentioned") gold already excludes join-bridge-only tables and

@@ -41,7 +41,7 @@ class DataConfig:
         Directory holding raw Spider files (``train_spider.json``,
         ``dev.json``, ``tables.json``, ``database/``).
     processed_dir
-        Directory for derived artefacts (gold-link JSON from week 2 onward).
+        Directory for derived artefacts (gold-link JSON).
     taniguchi_splits_dir
         Directory holding Taniguchi et al.'s human-annotated schema-linking
         labels (``dev.jsonl`` + ``test.jsonl``, 517 examples each, jointly

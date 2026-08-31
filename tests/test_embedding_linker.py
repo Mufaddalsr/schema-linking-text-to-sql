@@ -145,7 +145,7 @@ class TestEmbeddingLinkerThresholdAndTopK:
 class TestEmbeddingLinkerStarColumn:
     def test_star_column_never_predicted(self) -> None:
         # Schema objects can never contain a `*` column — schema_parser
-        # excludes it at parse time (Week 1 decision). This guards against
+        # excludes it at parse time, by design. This guards against
         # a future regression reintroducing it anywhere in the encode /
         # predict path.
         q = "select everything"

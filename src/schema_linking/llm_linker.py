@@ -10,8 +10,8 @@ Hallucination policy
 ---------------------
 Predicted tables/columns are never filtered against the real schema here —
 a sample naming a nonexistent table is passed straight through to the
-returned :class:`~schema_linking.base.Prediction`. The Week 3 evaluator
-computes ``hallucination_rate`` from exactly this raw, unfiltered signal;
+returned :class:`~schema_linking.base.Prediction`. The evaluator computes
+``hallucination_rate`` from exactly this raw, unfiltered signal;
 silently dropping hallucinations in this module would make that metric
 meaningless.
 
@@ -399,7 +399,7 @@ class LLMBackwardLinker:
         tests pass a ``tmp_path``.
     sql_output_path
         Where :meth:`predict_all` writes the per-query raw-SQL JSONL dump
-        (material for Week 9 error analysis). Never skipped. Defaults to
+        (material for the error analysis). Never skipped. Defaults to
         ``outputs/predictions/llm_backward_dev_sql.jsonl`` under the repo
         root; tests pass a ``tmp_path``.
     extra_metadata
@@ -535,7 +535,7 @@ class LLMBackwardLinker:
         -----------
         Overwrites :attr:`sql_output_path` with one JSONL line per query —
         ``{question_id, db_id, question, raw_sql, parse_issues}`` — the
-        material for Week 9 error analysis. Never skipped.
+        material for the error analysis. Never skipped.
         """
         groups: dict[str, list[SpiderExample]] = {}
         for ex in examples:

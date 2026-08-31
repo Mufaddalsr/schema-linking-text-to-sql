@@ -211,7 +211,7 @@ def run_embedding(
     Why a scores file
     ------------------
     ``output_path`` only records what was *predicted* (post top-k /
-    threshold). Week 9 error analysis needs the *raw* score of every
+    threshold). The error analysis needs the *raw* score of every
     schema element regardless of whether it was predicted — e.g. to
     characterise semantic-drift (SD) errors by comparing a missed gold
     element's cosine score against a correct prediction's. Each line of
@@ -483,7 +483,7 @@ def run_llm_forward(
         Per-query raw sample JSONL — one line per query with
         ``question_id, db_id, sample_predictions, n_samples_parsed,
         n_samples_valid, total_input_tokens, total_output_tokens,
-        total_cost_usd`` (straight from ``Prediction.extra``), for Week 9
+        total_cost_usd`` (straight from ``Prediction.extra``), for the
         error analysis.
 
     Side effects
@@ -1055,7 +1055,7 @@ def write_llm_cost_report(
     log_paths_by_phase: dict[str, Path] | None = None,
     output_path: Path | None = None,
 ) -> pd.DataFrame:
-    """Summarise LLM call costs across Week 6 phases into one CSV.
+    """Summarise LLM call costs across phases into one CSV.
 
     Parameters
     ----------
