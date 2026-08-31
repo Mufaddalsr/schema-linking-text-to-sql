@@ -12,7 +12,7 @@ docstring).
 Rule 3 and tiering
 -------------------
 The system prompt's rule against join-bridge-only columns targets **Tier 1**
-gold (see ``docs/scope.md`` §4). Tier 2 (Tier 1 + JOIN tables/columns)
+gold. Tier 2 (Tier 1 + JOIN tables/columns)
 is derived from Tier-1-style predictions at gold-comparison time by the
 evaluator, not by asking the model to overpredict joins it can't distinguish
 from genuinely-selected columns.
@@ -98,7 +98,7 @@ FORWARD_V1 = PromptTemplate(
     output_schema=_FORWARD_V1_OUTPUT_SCHEMA,
 )
 
-# forward_v2 — see notebooks/06_prompt_iteration.ipynb and docs/decisions.md
+# forward_v2 — see notebooks/06_prompt_iteration.ipynb
 # ("Prompt iteration: forward_v1 vs forward_v2") for the failure analysis that
 # motivated this change. Only rule 3 differs from v1: it generalises from
 # "columns whose only purpose is joining tables together" to also cover whole

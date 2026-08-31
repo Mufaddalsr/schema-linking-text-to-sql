@@ -1,7 +1,7 @@
 """Anthropic API client wrapper with retries, cost tracking, and prompt caching.
 
 Used by the LLM-based linkers (Methods C/D/E — forward, backward, bidirectional
-prompting, see ``docs/scope.md``) to call Claude with automatic retry on
+prompting) to call Claude with automatic retry on
 transient failures, a hard spend cap, and structured JSONL logging for later
 cost/hallucination analysis.
 """

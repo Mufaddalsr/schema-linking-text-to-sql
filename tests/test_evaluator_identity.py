@@ -212,7 +212,7 @@ def test_all_hallucinated_predictions_against_taniguchi_gold(
     becomes empty, so the vacuous-precision rule applies and
     ``precision == 1.0`` for both levels. This is the locked behaviour
     — hallucination is reported as its own metric rather than being
-    folded into precision (see ``docs/decisions.md``).
+    folded into precision.
     """
     fake_table = "ZZZ_THIS_TABLE_DOES_NOT_EXIST_ZZZ"
     fake_preds: dict[int, dict[str, Any]] = {

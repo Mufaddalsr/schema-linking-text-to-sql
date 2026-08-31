@@ -42,7 +42,7 @@ DEFAULT_CANDIDATES: list[int] = [70, 75, 80, 85, 90, 95]
 _TIER_NAME = "tier2"
 
 # Embedding grid — LOCKED. 4 x 5 x 4 x 5 = 400 configurations. Do not
-# expand without explicit approval (see docs/decisions.md).
+# expand without explicit approval.
 TABLE_TOP_K_GRID: tuple[int, ...] = (1, 2, 3, 5)
 TABLE_THRESHOLD_GRID: tuple[float, ...] = (0.30, 0.40, 0.50, 0.60, 0.70)
 COLUMN_TOP_K_GRID: tuple[int, ...] = (3, 5, 8, 12)
