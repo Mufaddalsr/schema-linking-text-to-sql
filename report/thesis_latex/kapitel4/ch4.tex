@@ -1,0 +1,557 @@
+\chapter{Methodology}\label{ch:4}
+
+\section{Problem Formulation}\label{sec:4-1}
+
+Following the notation established in Chapters 1 to 3, let \ensuremath{Q} denote a natural language question and \ensuremath{S = (T, C, R)} a database schema, where \ensuremath{T} is a set of tables, \ensuremath{C} a set of columns, and \ensuremath{R} a set of foreign-key relations between columns. A schema linking method is a function \ensuremath{f\colon (Q, S) \rightarrow \hat{L}}, where \ensuremath{\hat{L} \subseteq T \cup C} is a predicted link set: a set of table identifiers and table.column identifiers, expressed in terms of Spider's \texttt{column\_names\_original} field (Section~\ref{sec:3-1}) and excluding the wildcard column (Section~\ref{sec:3-2-2}).
+
+This formulation mirrors the structure of both gold-standard tiers defined in Chapter 3. In Tier 1 (\ensuremath{L_1}), human annotators label spans of \ensuremath{Q} with the table or table.column they refer to; in Tier 2 (\ensuremath{L_2}), sqlglot extracts every table and column referenced by the gold SQL query. Predictions and gold links are therefore always compared like for like.
+
+This thesis evaluates six methods, drawn from the four families reviewed in Chapter~\ref{ch:2}: lexical (Method A, \ensuremath{f_{A}}), embedding-based (Method B, \ensuremath{f_{B}}), three LLM-based variants distinguished by reasoning direction (Method C forward, \ensuremath{f_{C}}; Method D backward, \ensuremath{f_{D}}; Method E bidirectional, \ensuremath{f_{E}}), and graph-based (Method G, \ensuremath{f_{G}}). All six implement the same abstract interface (Section~\ref{sec:4-3-1}), so that a single evaluator can score every method against both \ensuremath{L_1} and \ensuremath{L_2} without method-specific scoring logic.
+
+\section{Schema Linking Methods Under Comparison}\label{sec:4-2}
+
+The six methods are presented in increasing order of the machinery they require, and they divide on two axes. The first is what signal drives the decision: surface string overlap for Method A, vector similarity for Method B, a language model's judgement for Methods C, D and G, and the schema's own foreign-key structure for the graph half of Method G. The second is what the method is asked to produce: Methods A, B, C and G name schema elements directly, whereas Method D names none, drafts a SQL query, and has its links recovered by parsing that query.
+
+Two of the six are compositions rather than new machinery. Method E is the set union of Methods C and D and makes no model call of its own. Method G pairs a single model call with a classical path search, so that the model supplies judgement and the algorithm supplies the structural bookkeeping it cannot hallucinate. The sections that follow take each method in turn.
+
+\subsection{Method A - Lexical Matching}\label{sec:4-2-1}
+
+Method A asks whether the words of the question literally appear in the names of the schema. It is the cheapest linker conceivable no training, no model, no API call and it follows the surface string-matching tradition of IRNet's type-vector heuristics \citep{guo2019} and the n-gram annotator benchmarked by \citet{lei2020}; it is included here to establish the floor that any semantically-aware method must clear.
+
+Method A checks every table and column independently against the question, and predicts an element if any one of three strategies fires. All three operate on normalized text: the question is lowercased and every non-alphanumeric character replaced by a space; an element's name is lowercased and its underscores replaced by spaces, so that \texttt{Song\_Name} and the question phrase ``song name'' become the same string.
+
+A token is one maximal run of alphanumeric characters in that normalized text. The question ``What is the name and nation of the singer?'' yields the token set \{what, is, the, name, and, nation, of, singer\}, and the element \texttt{Song\_Name} yields the token sequence (song, name). The distinction that matters between the first two strategies is contiguity, not vocabulary.
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  \textbf{Substring}: the element's normalized name occurs as a contiguous substring of the normalized question. \texttt{Song\_Name} fires on "\ldots the song name of\ldots" but not on "\ldots the name of the song\ldots", because the two tokens are not adjacent there.
+\item
+  \textbf{Token overlap}: every token of the element's name occurs somewhere in the question's token set, in any order and at any distance. This is the strategy that recovers "\ldots the name of the song\ldots" for \texttt{Song\_Name}.
+\item
+  \textbf{Fuzzy}: rapidfuzz.fuzz.\texttt{partial\_ratio} on the normalized pair clears a tunable \texttt{fuzzy\_threshold}. Unlike the first two, this strategy tolerates inexact character overlap: \texttt{partial\_ratio} slides the shorter string along the longer one, finds the best-matching window, and returns the normalized indel (insertion / deletion) similarity of that window on a 0--100 scale. A score of 100 means the name appears verbatim somewhere in the question; lower scores mean a partially overlapping window was the best available match.
+\end{enumerate}
+
+A worked example makes the operating point concrete. On dev question 39 (\texttt{concert\_singer}), ``What is the name and nation of the singer who have a song having 'Hey' in its name?'', the fuzzy scores against the singer table's columns are Name 100.0, \texttt{Song\_Name} 80.0, \texttt{Singer\_ID} 77.8, Age 66.7, \texttt{Is\_male} 61.5, \texttt{Song\_release\_year} 47.1 and Country 42.9.
+
+At \texttt{fuzzy\_threshold} = 70, three of the seven fire. The column the question actually means by ``nation'' is Country, and at 42.9 it is the furthest of all seven from firing; loosening the threshold enough to catch it would first admit four others. This is the lexical-mismatch failure mode of Section~\ref{sec:5-5}. Meanwhile \texttt{Singer\_ID}, which the question never asks for, fires at 77.8 purely because the word ``singer'' appears. The threshold's looseness therefore does not buy the missing column; it buys extra ones, which is the mechanism behind Method A's column precision of 0.403 reported in Section~\ref{sec:5-2}.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image12}
+  \caption[Method A on development question 39]{Method A on development question 39. Each of the singer table's seven columns is shown with its \texttt{partial\_ratio} score against the normalized question, and with which of the three strategies fires. Name clears on all three; \texttt{Song\_Name} clears on token overlap but not substring, its two tokens not being adjacent in the question; \texttt{Singer\_ID} clears on fuzzy alone. Country, the column the question means by ``nation'', scores 42.9 and is the furthest of the seven from the threshold.}\label{fig:4-1}
+\end{figure}
+
+Where more than one strategy fires, the reported strategy follows a fixed precedence: substring, then token, then fuzzy, with substring and token both scored at 100 and fuzzy at its own partial-ratio score. The recorded strategy is kept for per-element diagnostics and does not affect the prediction itself.
+
+Tables and columns are evaluated completely independently. A predicted column is never filtered by whether its parent table was also predicted, which keeps this baseline measuring the rawest possible string-matching signal rather than a filtered, more considered one. That is exactly the lower-bound role this method plays in the comparison (Section~\ref{sec:2-3-1}).
+
+The single free parameter, \texttt{fuzzy\_threshold}, was tuned by grid search over 40 to 95 on the seeded 1,000-example train subset, selecting the value that maximizes macro table F1 with column F1 as a tie-breaker. Tables were chosen as the driving signal because Method G's graph search builds on table-level predictions specifically.
+
+The winner, threshold = 70, sits at an interior maximum rather than on the edge of the search space: table F1 falls away in both directions, to 0.745 at 65 and 0.709 at 60 as the match is loosened, and to 0.747 at 75 and 0.653 at 95 as it is tightened (Table~\ref{tab:4-3}, Figure~\ref{fig:4-6}). Sweeping below the initial range was not part of the original tuning pass and was added specifically to check that the argmax was not an artifact of where the range began; it is not.
+
+\textbf{Algorithm 4.1: Method A (lexical)}
+
+\begin{lstlisting}[language=]
+input : question Q, schema S, fuzzy threshold t
+output: predicted tables and columns
+
+q_norm <- lowercase(Q); every non-alphanumeric character -> space; collapse spaces
+q_tokens <- split(q_norm) on non-alphanumeric characters
+
+function MATCH(name):
+n <- lowercase(name); '_' -> space; collapse spaces
+if n is a contiguous substring of q_norm : return ("substring", 100)
+if every token of n occurs in q_tokens : return ("token", 100)
+s <- partial_ratio(n, q_norm)
+if s >= t : return ("fuzzy", s)
+return NONE
+
+for each table T in S:
+m <- MATCH(T.name); if m != NONE: predict T; record diagnostic (T, m)
+for each column C of T:
+m <- MATCH(C.name); if m != NONE: predict (T, C); record diagnostic (T, C, m)
+
+// Columns are never filtered by whether their parent table was predicted:
+// this baseline measures the raw string-matching signal (Section 2.3.1).
+\end{lstlisting}
+
+\subsection{Method B - Embedding-Based Matching}\label{sec:4-2-2}
+
+Method B replaces literal overlap with semantic similarity: the question and every schema element are embedded into one vector space by a pre-trained sentence encoder, and an element is kept when its vector is close enough to the question's. It follows the ranking-based family of \citet{li2023} and \citet{glass2025}, but deliberately with an off-the-shelf encoder rather than a fine-tuned cross-encoder (Section~\ref{sec:2-3-2}), so that what is measured is what a training-free semantic method buys over string matching.
+
+Method B encodes both the question and every schema element with BAAI/bge-small-en-v1.5 \citep{xiao2023}, a 384-dimensional English sentence encoder from the BGE / C-Pack family, pinned to a specific HuggingFace commit, so that a re-run cannot silently pick up a re-uploaded checkpoint. The model is used entirely off the shelf: no fine-tuning, no task-specific head, no training data from Spider (Section~\ref{sec:2-3-2}).
+
+What is embedded is not the raw identifier but a short-rendered phrase, and the rendering rules are fixed in advance: a table is rendered as its human-readable Spider name, and a column as "\{column name\} of \{table name\}" so the column singer.\texttt{Song\_Name} is encoded as the phrase "song name of singer" rather than as the bare token \texttt{Song\_Name}. Spider's human-readable names are used here specifically because a sentence encoder is trained on natural-language phrases and handles them better than \texttt{snake\_case} identifiers; the predictions the method returns are nonetheless mapped back to \texttt{column\_names\_original}, keeping Method B on the same representational footing as every other method and both gold tiers (Section~\ref{sec:3-1}).
+
+All vectors are L2-normalised at encode time, so cosine similarity reduces to a plain dot product and no separate normalization step is needed at scoring time. Every database's schema vectors are encoded once and cached to disk as a compressed array file keyed by a hash of the model name, the pinned revision, a rendering-rule version tag, and the schema's own metadata; changing any one of those four invalidates the cache automatically, which is what allows the 400-point tuning grid of Section~\ref{sec:4-4-1} to re-score without ever re-encoding.
+
+An element is predicted if and only if it clears two independent conditions at once: it is among the \texttt{top\_k} highest-scoring elements of its kind (table or column) for that schema, and its score separately clears a threshold. Tables and columns are scored with entirely separate \texttt{top\_k}/threshold pairs, giving four free parameters in total.
+
+The two conditions cannot both bind at once. Because the elements are sorted by score, an element below the threshold at rank k implies every later element is below it as well, so the rule is equivalent to keeping the first min(\texttt{top\_k}, number above threshold) elements. Over the development split, \texttt{top\_k} is the binding condition on 964 of the 1,034 questions (93.2\%) at the column level and the threshold on only 32 (3.1\%); at the table level the split is 645 (62.4\%) against 97 (9.4\%). Figure~\ref{fig:4-2} shows one question in detail.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image13}
+  \caption[Method B's two conditions on one development question]{Method B's two conditions on one development question. Every column of the schema is ranked by cosine similarity to the question. The vertical rule is \texttt{column\_threshold} = 0.60 and the shaded band is the \texttt{column\_top\_k} = 3 cut. Two columns clear the threshold but fall outside the top three and are dropped, while singer.Country, which the gold SQL requires, ranks ninth and is missed by both conditions at once.}\label{fig:4-2}
+\end{figure}
+
+All four parameters were tuned together by an exhaustive grid search: \texttt{table\_top\_k} \ensuremath{\in} \{1, 2, 3, 5\}, \texttt{table\_threshold} \ensuremath{\in} \{0.30, 0.40, 0.50, 0.60, 0.70\}, \texttt{column\_top\_k} \ensuremath{\in} \{3, 5, 8, 12\}, \texttt{column\_threshold} \ensuremath{\in} \{0.30, 0.40, 0.50, 0.60, 0.70\}, giving 400 configurations. The search ran on the same seeded 1,000-example train subset used for Method A, scored against sqlglot Tier-2 train gold.
+
+It was kept fast by precomputing the full question-schema similarity matrix once and re-applying each of the 400 top-k/threshold masks against it, rather than re-encoding anything per configuration. Selection was by argmax \texttt{mean\_f1} = (\texttt{table\_f1} + \texttt{column\_f1}) / 2, ties broken by higher mean recall. The winning configuration, \texttt{table\_top\_k} = 2, \texttt{table\_threshold} = 0.50, \texttt{column\_top\_k} = 3, \texttt{column\_threshold} = 0.60, scored table F1 = 0.693, column F1 = 0.550, \texttt{mean\_f1} = 0.621 and \texttt{mean\_recall} = 0.752 on the tuning subset itself. Section~\ref{sec:4-4-1} and Figure~\ref{fig:4-7} report the shape of the grid around that point.
+
+It is worth stating explicitly what Method B does not see, since it is the structural difference between this method and the LLM-based ones that follow. Method C is given the whole schema at once, as a single rendered document of CREATE TABLE statements including foreign-key constraints, and can therefore reason about elements in relation to one another.
+
+Method B never sees a schema as a whole. Each table and each column is embedded in isolation, from its own short rendered phrase and nothing else, and is then scored against the question independently of every other element. No foreign key, no sibling column, and no table context enters the vector. The only place the schema exists as an object rather than as a bag of independent elements is the ranking step, where \texttt{top\_k} is applied per database so elements compete for a slot, but never inform each other's score. Method B is, in this precise sense, a retrieval method rather than a reasoning one.
+
+\textbf{Algorithm 4.2: Method B (embedding)}
+
+\begin{lstlisting}[language=]
+input : question Q, schema S, parameters (k_T, th_T) for tables, (k_C, th_C) for columns
+output: predicted tables and columns
+
+// once per schema, cached to disk under a hash of model + revision + rendering rules
+for each table T in S : v_T <- ENCODE(readable_name(T))
+for each column C of T: v_C <- ENCODE(readable_name(C) + " of " + readable_name(T))
+// ENCODE returns L2-normalised vectors, so cosine similarity is a dot product
+
+v_Q <- ENCODE(Q)
+
+for level in {tables, columns} with parameters (k, th):
+scores <- { e -> v_e . v_Q for every element e at this level }
+candidates <- the k highest-scoring elements of this level
+for each e in candidates:
+if scores[e] >= th: predict e
+
+// The two conditions are independent: k caps the count regardless of how many
+// clear th, and th can still drop an element that made the top-k cut.
+\end{lstlisting}
+
+\subsection{Method C - LLM-Forward}\label{sec:4-2-3}
+
+Method C gives an LLM the question and the entire schema in one prompt and asks directly which tables and columns are needed. This is the most direct use of an LLM as a linker; reasoning forward from question to schema and follows the few-shot ranking approach of \citet{dong2023} C3.
+
+Method C prompts Claude Haiku 4.5 with the question and the full rendered schema, CREATE TABLE statements with inline FOREIGN KEY constraints, using original (DB-canonical) identifiers throughout, since that is the form that appears in real SQL and in Spider's own gold-link JSON and asks it to return the tables and columns needed, without drafting SQL. The locked system prompt (\texttt{forward\_v1}) is reproduced verbatim in Appendix B; its operative rule is rule 3 (Table~\ref{tab:4-1}), which explicitly excludes columns whose only purpose is joining tables together, restricting the model's own selection to what would appear in SELECT, WHERE, GROUP BY, HAVING, or ORDER BY of the target SQL.
+
+The model is sampled k = 3 times at temperature 0.7 and the three parsed samples are aggregated by a vote threshold: union keeps any element named in at least 1 of 3 samples, majority requires \ensuremath{\lceil}k/2\ensuremath{\rceil} = 2, and intersection requires all 3. This thesis locks union for its reported results, following the sampling evidence reviewed in Section~\ref{sec:2-3-3} that additional samples reliably trade precision for recall.
+
+The vote denominator is always the full k = 3, never the count of samples that happened to parse successfully. A sample that fails to parse (invalid JSON) or fails output-schema validation (valid JSON in the wrong shape) contributes an empty vote rather than shrinking the threshold. A parse failure can therefore only ever hurt recall, never inflate it by making the bar easier to clear.
+
+Hallucinated names are a deliberate design choice, not an oversight. Predicted tables and columns are never filtered against the real schema inside Method C itself, specifically so that the hallucination-rate metric reported in Chapter~\ref{ch:5} measures the model's actual raw behavior rather than a version already cleaned up before scoring.
+
+In practice, across all 1,034 dev questions and both gold tiers, Method C produced zero hallucinated tables and zero hallucinated columns. That is an empirical finding about Claude Haiku 4.5 on Spider-scale schemas, not a property the method's design guarantees. The only nonzero hallucination count in this study belongs to Method D and, by inheritance, Method E: 11 hallucinated column names across 11 of the 1,034 dev questions, and zero hallucinated tables, a per-element rate of 0.003. Section~\ref{sec:5-2} shows that all eleven share a single cause and that none is an invented schema name.
+
+A revised prompt, \texttt{forward\_v2}, was drafted after inspecting Method C's worst failures on a 20-example stratified train iteration set: rule 3 was generalized from excluding join-only columns to also excluding whole tables included only because they are topically related to the question rather than actually referenced by the target SQL.
+
+Re-run on the same 20 examples, \texttt{forward\_v2} did not reproducibly outperform \texttt{forward\_v1}. Across repeated iteration runs the two versions' mean-F1 gap (0.005 to 0.008) flipped sign three times, smaller than this 20-example set's own noise floor, and the specific worst-case pattern that motivated v2 (three of five worst \texttt{forward\_v1} failures pulling in an extra join-adjacent table or column) reproduced identically under v2 in every run. \texttt{forward\_v1} was retained as the frozen prompt; \texttt{forward\_v2} remains registered in the codebase for a future ablation with a larger iteration set rather than being discarded.
+
+A separate, diagnostic self-consistency check, not part of the frozen pipeline compared k = 1 against all three k = 3 aggregation rules on a 100-question sample of the actual dev-run output already on disk. The result is a genuine limitation worth stating: k = 3 union produced identical mean table and column F1 to plain k = 1 on this sample (0.9209 / 0.7533 both ways), while k = 3 intersection scored marginally higher (0.9242 / 0.7569) and majority matched union on tables and improved column F1 only slightly (0.7553). Union remains the locked, reported aggregation chosen for the recall-oriented reasoning in Section~\ref{sec:2-3-3}.
+
+\textbf{Algorithm 4.3: Method C (LLM-forward)}
+
+\begin{lstlisting}[language=]
+input : question Q, schema S, samples k = 3, temperature 0.7, rule = union
+output: predicted tables and columns
+
+block <- RENDER(S) // CREATE TABLE statements with inline FOREIGN KEYs,
+// using original (DB-canonical) identifiers
+votes <- empty counter
+
+repeat k times:
+r <- LLM(system = forward_v1, user = block + two few-shot examples + Q)
+p <- PARSE_JSON(r)
+if p = NULL or not VALID(p, output_schema):
+continue // a failed sample casts an empty vote
+for each element e in p.tables + p.columns: votes[e] <- votes[e] + 1
+
+threshold <- 1 if rule = union | ceil(k/2) if majority | k if intersection
+predict every e with votes[e] >= threshold
+
+// The denominator is always the fixed k, never the number of samples that
+// parsed, so a parse failure can only lower recall, never lower the bar.
+// Predictions are NOT filtered against S: hallucination is measured, not suppressed.
+\end{lstlisting}
+
+\subsection{Method D - LLM-Backward}\label{sec:4-2-4}
+
+Method D never asks about schema elements at all: it asks the model to write the SQL query that answers the question, and then recovers the links by parsing that query. The reasoning runs backward, from a candidate answer to the schema that answer must have used, following \citet{yang2024} SQL-to-Schema.
+
+Method D asks the same model for a single SQL query answering the question, rather than for schema elements directly. The locked system prompt (\texttt{backward\_v1}, reproduced verbatim in Appendix B) is markedly simpler than Method C's: use only tables and columns in the provided schema, return only the SQL with no prose or markdown fences, no inline comments, and resolve any ambiguity in the question toward its most literal reading. No other prompt was ever drafted, requires at least three failures sharing a pattern before a prompt revision is drafted, and no single failure category reached that bar on Method D's 20-example iteration set, so \texttt{backward\_v1} was locked on the first pass.
+
+The generated SQL is parsed by the same shared sqlglot-based extractor used to build Tier 2 gold (Section~\ref{sec:3-2-2}), run in its permissive strict=False mode. A hallucinated table or column name in the generated SQL is a valid Method D prediction, not something to filter out, since the whole point of comparing Method D's predictions to its own SQL is to measure what the model actually wrote rather than a cleaned-up version of it.
+
+Sampling is locked at k = 1, temperature 0.0. Rather than instantiate a second LLM client, Method D temporarily overrides the temperature on the same shared client instance Method C uses, swapping it to 0.0 for the duration of each call and restoring it immediately afterward, so that the two methods' calls are logged through one client and one cost ledger without either affecting the other's configuration.
+
+Every generated SQL query, whether it parsed cleanly or not, is dumped to a dedicated JSONL file (one line per dev question: question, raw SQL, and any parse issues) specifically to support the error analysis in Chapter~\ref{ch:5} it is this file, inspected directly, that traced Method D's small hallucination rate (Section~\ref{sec:5-2}) to a single recurring cause: the model writing a syntactically correct aggregate with an alias (COUNT(*) AS \texttt{some\_alias}), which the SQL walker then reads as if the alias itself were a real column reference.
+
+\textbf{Algorithm 4.4: Method D (LLM-backward)}
+
+\begin{lstlisting}[language=]
+input : question Q, schema S
+output: predicted tables and columns
+
+save t <- client.temperature; client.temperature <- 0.0 // shared client, restored after
+sql <- LLM(system = backward_v1, user = RENDER(S) + two few-shot examples + Q)
+client.temperature <- t
+
+(tables, columns, issues) <- WALK(sql, S, strict = FALSE) // the Tier-2 walk, permissive
+append (Q, sql, issues) to llm_backward_dev_sql.jsonl // for the Chapter 5 analysis
+if any issue in issues has kind = parse_error: (tables, columns) <- ( ), ( )
+predict tables, columns
+
+// Unresolvable identifiers are kept, not dropped: what is measured is what
+// the model actually wrote (Section 4.2.4).
+\end{lstlisting}
+
+\subsection{Method E - LLM-Bidirectional}\label{sec:4-2-5}
+
+Method E takes the set union of Method C's forward prediction and Method D's backward one, on the hypothesis that two different reasoning directions fail on different questions. It follows the bidirectional union of \citet{cao2024} RSL-SQL, whose own ablation reports that the union beats either direction alone for a sufficiently strong model.
+
+Method E makes no LLM calls of its own. It loads Method C's and Method D's already-saved canonical dev predictions from disk and returns their set union, table by table and column by column, for every question.
+
+Each prediction's extra diagnostics record exactly how much each direction contributed and how much they agreed: counts of tables and columns found by forward only, backward only, or both. Figure~\ref{fig:4-3} aggregates those diagnostics over the full development split, and shows how one-sided the union is. At the table level the two directions almost entirely agree, with backward contributing just 3 tables the forward direction missed. At the column level backward contributes 661. Method E's advantage over Method C alone is therefore a column-level effect almost exclusively, which is what Chapter~\ref{ch:5} reports.
+
+If one direction's prediction is missing for a given question, Method E falls back to the other source alone with a logged warning, and returns an empty prediction with a logged warning only if both are missing.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image14}
+  \caption[What the bidirectional union buys, pooled over the 1,034 development questions]{What the bidirectional union buys, pooled over the 1,034 development questions. Circle areas are proportional to element counts and both panels share one scale. (a) Columns: the two directions agree on 2,322, forward alone adds 298, and backward alone adds 661. (b) Tables: they agree on 1,591, forward alone adds 138, and backward alone adds 3. Method E is close to Method C at the table level and materially different at the column level.}\label{fig:4-3}
+\end{figure}
+
+\textbf{Algorithm 4.5: Method E (LLM-bidirectional)}
+
+\begin{lstlisting}[language=]
+input : question Q
+output: predicted tables and columns
+
+p_C <- Method C's saved prediction for Q
+p_D <- Method D's saved prediction for Q
+
+if p_C and p_D are both missing: return the empty prediction (log a warning)
+if exactly one is missing : return the other (log a warning)
+
+predict p_C.tables + p_D.tables, p_C.columns + p_D.columns // set union
+record | forward only|, | backward only|, | both| as diagnostics
+
+// Method E makes no LLM call of its own; its entire cost is Methods C and D.
+\end{lstlisting}
+
+\subsection{Method G - Graph-Based}\label{sec:4-2-6}
+
+Method G splits the problem in two: an LLM names only the handful of core tables the question is about, and a classical path-search over the schema's foreign-key graph recovers the connecting tables a correct query would have to join through. It follows \citet{safdarian2025} SchemaGraphSQL in leaving the judgement to the model and the structural bookkeeping to an algorithm that cannot hallucinate.
+
+Method G's single LLM call (\texttt{graph\_endpoint\_v1}, reproduced verbatim in Appendix B) returns two things in one pass: one to three ``core'' tables, and the specific columns needed. The columns are restricted, by the same SELECT/WHERE-clause criterion as Method C's rule 3, to columns that would actually appear in the target SQL rather than columns that only exist to join tables together.
+
+The tables the method actually predicts are then computed by a classical graph algorithm over the schema's foreign-key graph, built once per schema as an undirected NetworkX graph with one node per table and one edge per pair of tables sharing at least one foreign key. A single core table is returned as is. Two core tables are connected by \texttt{shortest\_path}, falling back to the two endpoints alone and unconnected if no path exists, logged rather than silently dropped. Three core tables are connected by a greedy Steiner-tree approximation.
+
+Figure~\ref{fig:4-4} sets out the two stages and the two independent filters between them; Figure~\ref{fig:4-5} works the three-terminal case through in detail.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image15}
+  \caption[Method G's two stages]{Method G's two stages. One model call names core tables and columns; a path search over the foreign-key graph then decides the final table set, and the predicted columns pass through a second filter that requires each column's table to have survived the first. The two filters are independent, which is why a column can be entirely real and still be dropped, counted as \texttt{columns\_dropped\_off\_path} rather than as a hallucination.}\label{fig:4-4}
+\end{figure}
+
+The three-terminal case cannot be solved by a shortest path, because there is in general no single path through three tables. What is wanted is the cheapest subtree of the foreign-key graph that contains all three, a Steiner tree, whose exact computation is NP-hard in the general case.
+
+Method G therefore uses the standard greedy approximation: start the tree at the first terminal; then repeatedly find whichever not-yet-connected terminal is nearest to the tree as it currently stands, compute the shortest path from the tree to that terminal, and merge that path into the tree; stop when every terminal is included. A terminal with no path to the tree at all is added on its own and a warning logged, rather than aborting the prediction. On Spider's schemas, which average 5.28 tables per database (Table~\ref{tab:3-3}), the distinction between this approximation and an exact Steiner tree is very largely academic. The approximation is used because it is the standard, cheap and deterministic choice, not because exactness was tested and rejected.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image16}
+  \caption[The greedy Steiner-tree approximation on \texttt{dog\_kennels}]{The greedy Steiner-tree approximation on \texttt{dog\_kennels}. The LLM named three core tables (Owners, Professionals, Dogs); no single path connects all three, so the approximation grows a tree from the first terminal outward, and in doing so inserts Treatments, a table the model never named and the question never mentions, but without which the three cannot be joined. Grey nodes are the four schema tables the search correctly declined to include.}\label{fig:4-5}
+\end{figure}
+
+Endpoint resolution is deliberately unforgiving. A raw table name from the LLM is matched against the schema by case-insensitive exact string equality only, with no fuzzy fallback; a name that does not resolve is dropped and counted as a hallucinated endpoint rather than guessed at. In practice, across the full dev run, the endpoint model named zero non-schema tables, so this filter never actually triggered. The design is defensive rather than a response to an observed failure mode.
+
+Predicted columns go through a second, independent filter after the table-level graph computation is already fixed. A column survives only if its own table name resolves, its column name resolves within that table, and, the structural check specific to this method, its resolved table is actually a member of the final predicted table set.
+
+That last condition means a column can be entirely real, a genuine table and a genuine column both present in the schema, and still be dropped, if the LLM named it against a core table that a two-endpoint shortest-path or three-endpoint Steiner computation did not end up including. Every such drop is counted in the prediction's diagnostics as \texttt{columns\_dropped\_off\_path}, distinct from a genuine hallucination, since the underlying error mode is different: a real column attributed to a table the graph step declined to keep, not a fabricated element.
+
+A revised \texttt{graph\_endpoint\_v2} was drafted after the ``wrong endpoint'' pattern dominated six of eleven imperfect cases on the 20-example iteration set. The model named either a topically plausible but unreferenced second table as core, or a genuine join-bridge table as core.
+
+The latter directly contradicts \texttt{graph\_endpoint\_v1}'s own rule 2, which instructs the model not to return tables that exist only to join others, on the explicit promise that the graph algorithm will add them (Table~\ref{tab:4-1}). A join-bridge table named as a core endpoint is therefore not a borderline judgement call by the model but a direct violation of an instruction it was given, which is what made this the failure pattern the v2 revision was drafted to address.
+
+v2 rewrites rule 1 with an explicit ``must be needed by the SQL'' criterion, and gives rule 2 a concrete, testable definition of ``join-only'': no column of the table would appear in SELECT, WHERE, GROUP BY, HAVING or ORDER BY, and it connects to the rest only via foreign keys. As with \texttt{forward\_v2}, the revision produced no reproducible improvement on the same 20-example set, and \texttt{graph\_endpoint\_v1} was retained as the frozen prompt.
+
+\begin{table}[htbp]
+\centering
+\caption{The prompt rules, by method. Full prompt text is reproduced verbatim in Appendix B; this table is the operative summary the body text refers to by rule number.}\label{tab:4-1}
+\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.04\textwidth}>{\raggedright\arraybackslash}p{0.27\textwidth}>{\raggedright\arraybackslash}p{0.27\textwidth}>{\raggedright\arraybackslash}p{0.27\textwidth}@{}}
+\toprule
+\textbf{\#} & \textbf{Method C (\texttt{forward\_v1})} & \textbf{Method D (\texttt{backward\_v1})} & \textbf{Method G (\texttt{graph\_endpoint\_v1})}\tabularnewline
+\midrule
+1 & Use only tables and columns present in the provided schema. & Use only tables and columns present in the provided schema. & Return between 1 and 3 core tables; prefer fewer.\tabularnewline
+2 & Return every table needed and every column needed. & Return only the SQL query - no explanation, no markdown fences, no prose. & \textbf{Do not include tables that exist only to join others those are added automatically by a graph algorithm.}\tabularnewline
+3 & \textbf{Do not return columns whose only purpose is joining tables, return only columns that would appear in SELECT, WHERE, GROUP BY, HAVING or ORDER BY of the target SQL.} & Do not add comments inside the SQL. & For columns, return only those that would appear in SELECT, WHERE, GROUP BY, HAVING or ORDER BY. Not join columns.\tabularnewline
+4 & Output only a JSON object with keys tables and columns. & If the question is ambiguous, choose the most literal interpretation. & Every table and column must come from the provided schema.\tabularnewline
+5 & & & Output only a JSON object with keys \texttt{core\_tables} and columns.\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+\textbf{Algorithm 4.6: Method G (graph)}
+
+\begin{lstlisting}[language=]
+input : question Q, schema S
+output: predicted tables and columns
+
+G <- graph with one node per table of S, and an edge between two tables
+whenever they share at least one foreign key // built once per schema
+
+r <- LLM(system = graph_endpoint_v1, user = RENDER(S) + two few-shot examples + Q)
+p <- PARSE_JSON(r)
+if p = NULL or not VALID(p, output_schema): return the empty prediction (log a warning)
+(core, cols) <- (p.core_tables, p.columns)
+
+endpoints <- [ ]; n_hallucinated <- 0; n_dropped <- 0
+for each name in core:
+T <- the table of S whose name equals name case-insensitively // no fuzzy fallback
+if T = NULL: n_hallucinated <- n_hallucinated + 1
+else if T not in endpoints: append T to endpoints
+
+tables <- ( ) if endpoints is empty
+(endpoints[0]) if | endpoints| = 1
+SHORTEST_PATH(G, e1, e2) if | endpoints| = 2 (both alone if no path, logged)
+STEINER(G, endpoints) if | endpoints| >= 3
+predict tables
+
+for each (t, c) in cols:
+predict (t, c) if t resolves in S and c resolves in t and t is in tables
+else n_dropped <- n_dropped + 1
+record diagnostic (n_hallucinated, n_dropped)
+
+// Two independent filters: endpoint resolution decides the table set, and the
+// column filter then requires the column's table to have survived it.
+
+function STEINER(G, terminals): // greedy Steiner-tree approximation
+tree <- { terminals[0] }
+for each e in terminals[1...]:
+if e is in tree: continue
+best <- the shortest of { SHORTEST_PATH(G, v, e) : v in tree }
+if best = NULL: tree <- tree + { e } // disconnected: include alone, warn
+else : tree <- tree + nodes(best)
+return sorted(tree)
+\end{lstlisting}
+
+The two rules set in bold are the ones the rest of this thesis refers to by number. Method C's rule 3 is the instruction that excludes join-only columns, and it is the single design decision most responsible for that method's Tier-2 behavior: it tells the model to withhold exactly the foreign-key columns Tier 2 requires, which is why Method C's Tier-2 column SRR (0.677) falls so far below its Tier-1 figure (0.916). Method G's rule 2, discussed in Section~\ref{sec:4-2-6}, is the corresponding instruction at the table level: it tells the endpoint model not to name pure join-bridge tables, on the understanding that the graph search will insert them.
+
+\section{Shared Infrastructure}\label{sec:4-3}
+
+Six methods that differ this much in machinery are only comparable if everything around them is held fixed. Three components are therefore shared rather than reimplemented per method: the interface every linker satisfies and the record it returns (Section~\ref{sec:4-3-1}), the SQL walk used both for Tier-2 gold and for Method D's generated queries (Section~\ref{sec:4-3-2}), and the single API client through which every model call is made, retried, priced and logged (Section~\ref{sec:4-3-3}). Appendix D maps the codebase onto these roles (Table~\ref{tab:D-1}) and records why each third-party library was chosen (Table~\ref{tab:D-2}).
+
+\subsection{Linker Protocol (base.py)}\label{sec:4-3-1}
+
+All six methods implement a single interface, declared once in base.py as a typed protocol with exactly two operations: \texttt{predict\_one}, which links one question against one schema, and \texttt{predict\_all}, which links a batch and returns predictions keyed by Spider question id. Both return a Prediction, a frozen dataclass holding the database id, a tuple of predicted table names, and a tuple of (table, column) pairs, all in original schema case. The record is immutable and hashable by construction, so a prediction cannot be mutated in place between being produced and being scored.
+
+Four further fields (\texttt{table\_scores}, \texttt{column\_scores}, \texttt{token\_cost}, extra) carry per-method diagnostics: the strategy and score behind each lexical hit, the cosine similarity behind each embedding hit, the per-sample vote counts behind each LLM prediction, and the endpoint and path trace behind each graph prediction. All four are deliberately excluded from the saved prediction JSON, so that diagnostics can be as method-specific as they need to be without any of it reaching the evaluator. The evaluator (Section~\ref{sec:4-5}) is written once against this protocol.
+
+\subsection{Shared SQL-Parsing Utilities}\label{sec:4-3-2}
+
+Section~\ref{sec:3-2-2} introduced the shared SQL-parsing utility that underlies Tier 2 gold-link extraction; Sections 4.2.4 and 4.2.6 described its reuse on Method D's LLM-drafted SQL. The utility exposes a single parsing function with a strict flag. With strict = True, used for gold extraction, it assumes syntactically well-formed SQL and raises on any parse failure, which is appropriate for Spider's human-authored gold queries. With strict = False, used for Method D, it instead recovers whatever table and column references it can from a query that may be malformed, since an LLM-drafted query is not guaranteed to parse cleanly.
+
+Keeping both modes behind one shared function, rather than maintaining separate parsing logic for gold extraction and for Method D, is what guarantees the two interpret identical SQL syntax identically wherever they overlap. Any measured difference between Method D's predictions and Tier 2 gold is therefore isolated to genuine differences in SQL content rather than to parser inconsistency.
+
+\subsection{LLM Client: Retries, Cost Tracking, and Caching}\label{sec:4-3-3}
+
+All three LLM-touching methods (C, D, G) share a single client wrapper around the Anthropic API rather than each managing its own HTTP calls. It retries transient failures with exponential backoff up to five attempts: connection errors and rate limits always, server-side 5xx errors conditionally, and client-side 4xx errors never, since a bad request will not succeed on retry.
+
+Every call, successful or not, is logged as one JSONL line: timestamp, model, temperature, a SHA-256 hash of the prompt (for deduplication without storing the prompt text itself), token counts split by input, output, cache-write and cache-read, computed cost, latency, stop reason, and a hash of the response text. Cost is computed from a small, explicit per-model pricing table (Claude Haiku 4.5: \$1.00 / MTok input, \$5.00 / MTok output, \$1.25 / MTok cache write, \$0.10 / MTok cache read).
+
+The complete LLM budget for the thesis was \$11.89 across 6 767 calls, averaging 1 536 input and 44 output tokens per call. Prompt caching was not enabled for the reported runs, so this is an unoptimized upper bound.
+
+\begin{table}[htbp]
+\centering
+\caption{LLM cost by phase (Claude Haiku 4.5).}\label{tab:4-2}
+\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lllll@{}}
+\toprule
+\textbf{Phase} & \textbf{Cost (USD)} & \textbf{Calls} & \textbf{Avg in-tok} & \textbf{Avg out-tok}\tabularnewline
+\midrule
+C - prompt iteration & 0.25 & 120 & 1 866 & 46.9\tabularnewline
+C - dev run (k = 3) & 6.33 & 3 577 & 1 539 & 45.9\tabularnewline
+D - prompt iteration & 0.16 & 80 & 1 832 & 43.9\tabularnewline
+D - dev run & 3.22 & 1 946 & 1 472 & 36.2\tabularnewline
+G - dev run & 1.93 & 1 044 & 1 581 & 52.8\tabularnewline
+Total & 11.89 & 6 767 & 1 536 & 44.2\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+\section{Threshold Tuning, Few-Shot Selection, and Prompt Iteration}\label{sec:4-4}
+
+\subsection{Method A and B: Threshold and Grid Tuning}\label{sec:4-4-1}
+
+Methods A and B's free parameters (Sections 4.2.1 and 4.2.2) are both tuned exclusively on a fixed 1,000-example subset of Spider's training split, sampled with a fixed random seed (42) for reproducibility, and scored against Tier 2 gold. Tier 2 is the only standard available on train: \citet{taniguchi2021} annotations cover the development split only, and this thesis never tunes against development data.
+
+To restate the parameters here: Method A has exactly one, \texttt{fuzzy\_threshold}, the 0 to 100 cut-off above which a \texttt{partial\_ratio} match counts as a hit, its two other strategies being exact and having nothing to tune. Method B has four, applied as two independent conditions at each of two levels: \texttt{table\_top\_k} and \texttt{table\_threshold} for tables, \texttt{column\_top\_k} and \texttt{column\_threshold} for columns, where \texttt{top\_k} caps how many elements may be predicted and threshold sets how similar an element must be to be predicted at all. That is five free parameters in total across the two methods. The three LLM-based methods and the graph method have none of this kind, their behavior being fixed instead by a locked prompt and a locked sampling budget.
+
+The tuning objective is macro F1, not F6. Method A's single threshold is chosen by table F1, and Method B's four-parameter grid by the mean of table and column F1, with ties broken toward higher recall. F6, the recall-weighted F-measure defined in Section~\ref{sec:4-5-3} and the metric this thesis treats as the best available proxy for a linker's downstream usefulness, is deliberately not the tuning target.
+
+The reason is that using it for both selection and reporting would let the same recall-heavy weighting shape both the knob and the yardstick. A threshold tuned to maximize F6 would be rewarded for exactly the over-prediction F6 forgives, and the reported F6 would then partly measure that tuning choice rather than the method. Macro F1 is used for selection precisely because it is the more neutral of the two.
+
+\begin{table}[htbp]
+\centering
+\caption{Method A's full \texttt{fuzzy\_threshold} sweep, 1,000-example seeded train subset, scored against Tier 2 gold. The argmax on table F1, which is the tuning objective, is interior at 70, with F1 falling in both directions. Column F1 peaks separately at 80.}\label{tab:4-3}
+\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llllll@{}}
+\toprule
+ & \multicolumn{3}{c}{\small\textbf{Table}} & \multicolumn{2}{c}{\small\textbf{Column}}\tabularnewline
+\cmidrule(lr){2-4}\cmidrule(lr){5-6}
+\textbf{Fuzzy\_threshold} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{P} & \textbf{F1}\tabularnewline
+\midrule
+\textbf{40} & 0.413 & 0.984 & 0.535 & 0.154 & 0.243\tabularnewline
+\textbf{45} & 0.488 & 0.946 & 0.586 & 0.180 & 0.277\tabularnewline
+\textbf{50} & 0.525 & 0.939 & 0.614 & 0.196 & 0.297\tabularnewline
+\textbf{55} & 0.667 & 0.882 & 0.683 & 0.284 & 0.385\tabularnewline
+\textbf{60} & 0.724 & 0.858 & 0.709 & 0.322 & 0.419\tabularnewline
+\textbf{65} & 0.798 & 0.831 & 0.745 & 0.381 & 0.466\tabularnewline
+\textbf{70 (chosen)} & 0.843 & 0.795 & 0.751 & 0.455 & 0.486\tabularnewline
+\textbf{75} & 0.863 & 0.765 & 0.747 & 0.494 & 0.497\tabularnewline
+\textbf{80} & 0.884 & 0.739 & 0.739 & 0.574 & 0.505\tabularnewline
+\textbf{85} & 0.893 & 0.713 & 0.721 & 0.716 & 0.488\tabularnewline
+\textbf{90} & 0.908 & 0.657 & 0.674 & 0.765 & 0.485\tabularnewline
+\textbf{95} & 0.918 & 0.631 & 0.653 & 0.789 & 0.477\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image17}
+  \caption[Macro F1 against \texttt{fuzzy\_threshold}, swept from 40 to 95 on the seeded\ldots]{Macro F1 against \texttt{fuzzy\_threshold}, swept from 40 to 95 on the seeded 1,000-example train subset. The table curve, which is the tuning objective, peaks at 70; the column curve peaks separately at 80 and is used only as a tie-breaker.}\label{fig:4-6}
+\end{figure}
+
+Two features of the sweep are worth drawing out. The first is that the two levels do not agree on an optimum: table F1 peaks at 70 while column F1 peaks at 80, so the choice of which level drives the selection is not a formality. Had columns driven it, the frozen threshold would have been 80, raising Method A's column precision on the tuning subset from 0.455 to 0.574 and lowering its table recall from 0.795 to 0.739. Tables were chosen because Method G's graph search consumes table-level predictions specifically, and a baseline tuned to a level no other method depends on would be a weaker point of comparison.
+
+The second is that the sweep is flat near its peak, at 0.745, 0.751 and 0.747 for 65, 70 and 75, so the exact value carries little weight. What the sweep establishes is that Method A's operating point is not perched on the boundary of an arbitrarily chosen range, which the original 70 to 95 sweep on its own could not show.
+
+Method B's 400-point grid (\texttt{table\_top\_k} \ensuremath{\times} \texttt{table\_threshold} \ensuremath{\times} \texttt{column\_top\_k} \ensuremath{\times} \texttt{column\_threshold}) was kept computationally cheap by precomputing the full question-schema cosine-similarity matrix once and re-applying each of the 400 masks against it rather than re-encoding anything per configuration; the full sweep runs in about twenty seconds on CPU. The same protocol, same seed, same subset and same Tier-2-on-train gold govern both methods, so neither is tuned under more favorable conditions than the other.
+
+Figure~\ref{fig:4-7} shows the grid around its argmax, and makes two things visible that the winning configuration alone does not. The first is that the four parameters are not equally consequential. Holding the other three at their winning values, \texttt{table\_threshold} moves mean F1 by 0.189 across its range, \texttt{column\_top\_k} by 0.070, \texttt{table\_top\_k} by 0.035, and \texttt{column\_threshold} by only 0.026.
+
+The second is that \texttt{column\_threshold} is very nearly inert. Its value is flat to three decimals at 0.30, 0.40, 0.50 and 0.60, and only costs anything at 0.70. The frozen choice of 0.60 is therefore not a meaningfully tuned value so much as any value below the point at which the threshold starts discarding wanted columns. Read alongside Section~\ref{sec:4-2-2}'s finding that \texttt{top\_k} is the binding condition on 93.2\% of development questions, the column threshold is doing very little work in this method. As with Method A's flat peak, this is worth stating rather than leaving the four-parameter grid to imply that all four were equally load bearing.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image18}
+  \caption[Method B's 400-point tuning grid]{Method B's 400-point tuning grid. (a) Mean F1 across the column grid at the winning table settings, with the selected configuration outlined; the bottom row is flat at 0.621 for four of the five thresholds. (b) Each parameter swept alone with the other three held at their winning values, ordered by how much it moves mean F1. \texttt{table\_threshold} dominates; \texttt{column\_threshold} barely registers.}\label{fig:4-7}
+\end{figure}
+
+\subsection{Few-Shot Example Selection}\label{sec:4-4-2}
+
+A few-shot example is a solved instance placed in the prompt ahead of the real question: a schema, a question, and the correct answer in exactly the output shape the method expects back. Its purpose here is narrow and mostly mechanical.
+
+It is not there to teach the model what schema linking is, since Section~\ref{sec:5-1}'s results show the model already knows, but to fix the form of the answer, so that the output parses as valid JSON in the expected shape on the first attempt, and to demonstrate the two structural cases that the rules alone state only abstractly: a single-table question and a multi-table joined one.
+
+Because example selection is itself a documented lever on LLM linking performance, with \citet{katsogiannismeimarakis2026} reporting that one demonstration helps but that further ones help inconsistently, the selection procedure is fixed in advance and applied identically to all three LLM-based methods, so that no method can be advantaged by a luckier draw of examples than another.
+
+All three LLM-based methods (C, D, G) use the same two fixed few-shot examples, selected once and reused everywhere rather than chosen per method. This is a deliberate fixed-example strategy, not a retrieval-based or per-question selection. The two examples instantiate two structural patterns fixed in advance: simple (a single table, an aggregation, no joins) and \texttt{multi\_table} (two or more tables joined via FROM, with gold columns spanning at least two of them).
+
+Candidates are drawn from Spider train, filtered to Tier-1 gold-linked examples whose \texttt{db\_id} has not already been used by an earlier pattern, which guarantees the two examples come from different databases, then shuffled with a fixed seed (42), and the first match for each pattern is kept. Every candidate's gold tables and columns are validated against its own schema before being accepted, so a malformed few-shot example can never silently enter a prompt.
+
+The examples passed are qid 4913 (\texttt{store\_product} database, ``What is the total number of residents for the districts with the 3 largest areas?'', the simple pattern) and qid 334 (\texttt{product\_catalog} database, ``Which attribute definitions have attribute value 0? Give me the attribute name and attribute ID?'', the \texttt{multi\_table} pattern).
+
+Each method sees these same two examples reformatted for its own output shape, rather than three separately authored pairs. Method C's forward format lists tables and columns directly. Method D's backward format replaces the tables/columns pair with the example's own gold SQL, drawn straight from Spider train with no LLM involved in generating it. Method G's graph format renames tables to \texttt{core\_tables}, relying on the fact that Tier-1 gold already excludes join-bridge-only tables, so every table in a Tier-1 few-shot example is already a valid core or endpoint table with no separate filtering step needed.
+
+\section{Evaluation Metrics}\label{sec:4-5}
+
+Every method is scored against both gold-standard tiers (\ensuremath{L_1} and \ensuremath{L_2}) using five metrics, computed per example and aggregated across the evaluation split both ways, macro (the mean of each question's own precision/recall, weighting every question equally regardless of schema size) and micro (pooled true/false-positive/negative counts across the whole split, weighting every predicted or gold element equally instead).
+
+Figure~\ref{fig:4-8} works all five through on a single prediction, so that the definitions that follow can be read against a concrete case.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image19}
+  \caption[The five metrics on one prediction, Method B on development question 4]{The five metrics on one prediction, Method B on development question 4. The predicted and gold link sets are shown as a partition into true positives, false positives and false negatives, and each metric is then computed from those three counts. SRR is the only one that is not a ratio: it asks a single yes-or-no question, whether the false-negative cell is empty.}\label{fig:4-8}
+\end{figure}
+
+\subsection{Precision, Recall, F1}\label{sec:4-5-1}
+
+For a predicted link set \ensuremath{\hat{L}} and gold link set L on a single example, precision, recall, and F1 are defined in the standard way: 
+\begin{gather*}
+  \mathrm{Precision} = \frac{|\hat{L} \cap L|}{|\hat{L}|}
+  \qquad
+  \mathrm{Recall} = \frac{|\hat{L} \cap L|}{|L|}
+  \\[0.8ex]
+  F_1 = \frac{2 \cdot \mathrm{Precision} \cdot \mathrm{Recall}}{\mathrm{Precision} + \mathrm{Recall}}
+\end{gather*}
+
+
+An empty prediction against a non-empty gold scores precision = 1.0 (vacuously, since zero predictions means zero false positives) and recall = 0.0. This is a deliberate departure from scikit-learn's convention of scoring vacuous precision as 0 with a warning, chosen because a linker that predicts nothing should be penalized entirely through recall rather than having that failure double-counted into precision as well.
+
+Precision penalizes over-prediction, meaning irrelevant tables or columns included; recall penalizes under-prediction, meaning required elements omitted. A missed link is generally more costly than an extra one for downstream SQL generation: an omitted column makes correct generation impossible, whereas an extra one merely adds noise that the model may or may not be misled by. This thesis therefore does not rely on F1 alone, and reports the further metrics below alongside it.
+
+\subsection{Strict Retrieval Rate (SRR)}\label{sec:4-5-2}
+
+Following \citet{cao2024}, SRR measures the fraction of examples for which a prediction achieves perfect recall - every gold element present, with no tolerance for partial credit: 
+\begin{equation*}
+  \mathrm{SRR} = \frac{1}{N} \sum_{i=1}^{N} \mathbf{1}\!\left[\hat{L}_i \supseteq L_i\right]
+\end{equation*}
+where \ensuremath{N} is the number of examples in the split and \ensuremath{\mathbf{1}}{[}\ensuremath{\cdot}{]} is an indicator function. SRR is deliberately harsher than recall: a single missed column zeroes an example's contribution entirely, on the reasoning - shared by \citet{cao2024} and by \citet{katsogiannismeimarakis2026}, who adopt an equivalent definition - that a downstream SQL generator supplied an incomplete schema cannot succeed no matter how small the omission.
+
+\subsection{F-beta (\texorpdfstring{\ensuremath{\beta}}{beta} = 6)}\label{sec:4-5-3}
+
+Following \citet{glass2025}, this thesis also reports a recall-weighted F-beta score with \ensuremath{\beta} = 6: 
+\begin{gather*}
+  F_\beta = \frac{(1 + \beta^{2}) \cdot \mathrm{Precision} \cdot \mathrm{Recall}}{\beta^{2} \cdot \mathrm{Precision} + \mathrm{Recall}}
+  \\[0.8ex]
+  \text{so that}\quad
+  F_6 = \frac{37 \cdot \mathrm{Precision} \cdot \mathrm{Recall}}{36 \cdot \mathrm{Precision} + \mathrm{Recall}}
+\end{gather*}
+ The \ensuremath{\beta} = 6 weighting follows \citet{glass2025} own reported finding that, in their end-to-end experiments, F6 tracked downstream SQL generation accuracy more closely than precision or a balanced F1 did; this thesis adopts the same weighting rather than re-deriving its own, so that its results remain comparable to that prior finding rather than introducing a sixth, thesis-specific metric convention into a literature already documented as suffering from too many incompatible ones.
+
+The weighting is on recall, and heavily so: \ensuremath{\beta} = 6 gives \ensuremath{\beta}\ensuremath{^{2}} = 36, meaning recall is weighted thirty-six times as much as precision. The behavior this produce is best seen at the limits. As precision approaches 1, F6 approaches recall; and because precision enters the denominator only through the term 36\ensuremath{\cdot}P, it stops mattering almost entirely once it is large relative to R/36. A method must therefore have a catastrophic precision not merely a poor one before F6 penalizes it appreciably.
+
+Method E's Tier-1 columns illustrate the effect exactly. At precision 0.596 and recall 0.972, the balanced F1 is 0.682, which reads as a middling result; the F6 of the same prediction is 0.956, which reads as a near-perfect one. Neither number is wrong. F1 is answering "how clean is this prediction?" and F6 is answering "how likely is it that everything needed is in here?" and the second question is the one a downstream SQL generator actually cares about, which is the reasoning behind \citet{glass2025} recommendation this thesis follows. It also means F6 must never be read on its own: F6 alongside precision is informative, F6 alone would rank a method that predicts the entire schema at the very top.
+
+Both figures are macro means of the per-question scores rather than the formulas evaluated at the macro precision and recall. For F6 the distinction does not matter, since F6 tracks recall and recall averages linearly. For F1 it does: the formula evaluated at 0.596 and 0.972 returns 0.739, about six points above the reported mean of the per-question values. Figure~\ref{fig:4-9} plots both response curves and marks this point on them.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image20}
+  \caption[How F6 responds, compared with F1]{How F6 responds, compared with F1. (a) Both scores as precision varies at fixed recall: F1 falls roughly linearly while F6 stays near recall until precision becomes very small. (b) The same at fixed precision as recall varies, where F6 tracks recall almost exactly. The marked point is Method E's Tier-1 columns, at precision 0.596 and recall 0.972.}\label{fig:4-9}
+\end{figure}
+
+\subsection{Hallucination Rate (HR)}\label{sec:4-5-4}
+
+The four metrics above all assume that a predicted element exists in the schema. For the three LLM-touching methods that assumption is not free, so this thesis reports a fifth quantity alongside them. A predicted element is hallucinated when it names a table absent from the schema, or a column absent from the table it is attributed to. The hallucination rate for one question is the count of such elements divided by the total number of elements that prediction contained before any filtering, macro-averaged over the split in the same way as the other metrics.
+
+The evaluator removes hallucinated elements from a prediction before computing precision, recall, F1, F6 and SRR, and counts them only under HR. Without that separation a hallucination would be charged twice once as a false positive and once as a hallucination and the two failure modes are worth keeping distinct: a real-but-unnecessary column is noise a downstream generator can ignore, whereas a nonexistent one produces SQL that cannot execute at all. Methods A, B and G cannot hallucinate by construction, so HR is only ever informative for Methods C, D and E; Section~\ref{sec:5-2} reports what it found for each.
+
+\section{Statistical Testing (McNemar's Test)}\label{sec:4-6}
+
+Precision, recall, F1, SRR, and F6 establish how methods rank; they do not by themselves establish whether an observed difference between two methods is larger than what could arise from the particular sample of questions being evaluated on. This thesis therefore supplements its five metrics with McNemar's test \citep{mcnemar1947} for eight selected pairwise comparisons between methods, computed separately against each gold-standard tier.
+
+For a pair of methods, each example is scored as a binary success or failure using the same perfect-recall criterion as SRR. An example counts as a success for a method if that method's prediction fully contains the gold link set, and a failure otherwise. The two methods' per-example outcomes on the identical set of examples are then arranged in a 2 \ensuremath{\times} 2 contingency table of the four possible outcome pairs: both succeed, both fail, only the first succeeds, only the second succeeds.
+
+McNemar's test statistic depends only on the two discordant cells, the examples where the methods disagree, and tests the null hypothesis that a disagreement is equally likely to favor either method. A significant result indicates that one method's advantage over the other is unlikely to be an artifact of which particular questions happened to be evaluated. Because the same fixed set of examples is scored by every method, this pairing controls for per-example difficulty in a way that comparing two methods' aggregate metrics alone cannot. That is why this thesis reports both: the five metrics of Section~\ref{sec:4-5} for magnitude, and McNemar's test for whether that magnitude is statistically defensible.

@@ -1,0 +1,360 @@
+\chapter{Results}\label{ch:5}
+
+This chapter reports results for all six methods, against both gold-standard tiers, at both the table and column level, macro-averaged over the full N = 1,034 Spider development split. That the split is complete confirms, against the concern raised in Section~\ref{sec:3-2-1}, that this thesis's data-loading code draws on \citet{taniguchi2021} full annotated development set.
+
+Total measured LLM spend across the evaluation run was \$11.89 across 6,767 API calls to Claude Haiku 4.5, within the cap discussed in Section~\ref{sec:4-3-3}.
+
+\section{Overall Performance Comparison Across Methods}\label{sec:5-1}
+
+Table~\ref{tab:5-1} reports precision, recall, F1, F6, SRR, and per-prediction-element hallucination rate for every method, gold tier, and level. Two headline results anchor the chapter: the best Tier-2 column F1 of any method is 0.939, achieved by Method D (LLM-backward); the best Tier-1 column SRR of any method is 0.951, achieved by Method E (LLM-bidirectional).
+
+Every method is recall-heavy at the column level, which is the correct bias for a filter feeding a downstream generator, where a missed column costs more than an extra one. As Section~\ref{sec:5-3} details, the methods reach that bias by very different routes. Figure~\ref{fig:5-1} puts every row of the table on one axis pair so those routes are visible before the per-method discussion begins.
+
+\begin{table}[htbp]
+\centering
+\caption{Main results, Spider dev, macro average, N = 1,034. HR = per-prediction-element hallucination rate. Tier 1 is the \citet{taniguchi2021} human annotation; Tier 2 is sqlglot parsed over the gold SQL (Chapter~\ref{ch:3}).}\label{tab:5-1}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lllllllll@{}}
+\toprule
+\textbf{Method} & \textbf{Tier} & \textbf{Level} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{F6} & \textbf{SRR} & \textbf{HR}\tabularnewline
+A lexical & 1 & tables & 0.842 & 0.785 & 0.737 & 0.787 & 0.715 & 0.000\tabularnewline
+& & columns & 0.403 & 0.863 & 0.484 & 0.837 & 0.768 & 0.000\tabularnewline
+& 2 & tables & 0.850 & 0.779 & 0.736 & 0.780 & 0.699 & 0.000\tabularnewline
+& & columns & 0.494 & 0.763 & 0.528 & 0.752 & 0.554 & 0.000\tabularnewline
+B embedding & 1 & tables & 0.662 & 0.885 & 0.731 & 0.877 & 0.791 & 0.000\tabularnewline
+& & columns & 0.430 & 0.794 & 0.514 & 0.776 & 0.647 & 0.000\tabularnewline
+& 2 & tables & 0.678 & 0.880 & 0.737 & 0.873 & 0.772 & 0.000\tabularnewline
+& & columns & 0.564 & 0.721 & 0.573 & 0.716 & 0.469* & 0.000\tabularnewline
+C llm forward & 1 & tables & 0.907 & \textbf{0.988} & 0.932 & \textbf{0.985} & \textbf{0.974} & 0.000\tabularnewline
+& & columns & 0.677 & 0.956 & 0.741 & 0.945 & 0.916 & 0.000\tabularnewline
+& 2 & tables & 0.935 & \textbf{0.998} & 0.957 & \textbf{0.996} & \textbf{0.997} & 0.000\tabularnewline
+& & columns & 0.853 & 0.863 & 0.815 & 0.862 & 0.677* & 0.000\tabularnewline
+D llm backward & 1 & tables & \textbf{0.949} & 0.978 & \textbf{0.953} & 0.977 & 0.957 & 0.003\tabularnewline
+& & columns & 0.667 & 0.952 & 0.739 & 0.941 & 0.927 & 0.003\tabularnewline
+& 2 & tables & \textbf{0.980} & 0.989 & \textbf{0.980} & 0.989 & 0.984 & 0.003\tabularnewline
+& & columns & \textbf{0.931} & 0.968 & \textbf{0.939} & 0.967 & 0.923 & 0.003\tabularnewline
+E llm bidirectional & 1 & tables & 0.905 & \textbf{0.988} & 0.931 & \textbf{0.985} & \textbf{0.974} & 0.003\tabularnewline
+& & columns & 0.596 & \textbf{0.972} & 0.682 & \textbf{0.956} & \textbf{0.951} & 0.003\tabularnewline
+& 2 & tables & 0.934 & \textbf{0.998} & 0.956 & \textbf{0.996} & \textbf{0.997} & 0.003\tabularnewline
+& & columns & 0.844 & \textbf{0.986} & 0.879 & \textbf{0.981} & \textbf{0.959} & 0.003\tabularnewline
+G graph & 1 & tables & 0.929 & 0.987 & 0.946 & \textbf{0.985} & 0.970 & 0.000\tabularnewline
+& & columns & \textbf{0.698} & 0.958 & \textbf{0.757} & 0.949 & 0.917 & 0.000\tabularnewline
+& 2 & tables & 0.958 & 0.996 & 0.970 & 0.995 & 0.992 & 0.000\tabularnewline
+& & columns & 0.860 & 0.846 & 0.808 & 0.847 & 0.653* & 0.000\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image21}
+  \caption[Every row of Table~\ref{tab:5-1} at the column level, as one point per method and tier]{Every row of Table~\ref{tab:5-1} at the column level, as one point per method and tier. Each arrow runs from a method's Tier-1 score to its Tier-2 score, and contours mark equal F1. Every arrow points right, because Tier 2's larger gold turns some of what a method already predicted into a correct link. What separates the methods is the vertical direction: only Methods D and E point up. The other four lose recall, because Tier 2 asks for the join keys they never predicted.}\label{fig:5-1}
+\end{figure}
+
+\section{Per-Method Analysis}\label{sec:5-2}
+
+Method A (lexical) behaves exactly as Section~\ref{sec:2-3-1} predicts: it over-predicts substantially, retaining 4.49 columns per question against a Tier-1 gold mean of only 1.71. That caps its column precision at 0.403 even though its recall (0.863) stays competitive.
+
+This is the signature of a method that matches generic English words against real column names with no semantic filter. Figure~\ref{fig:5-2} places every method's prediction budget against both gold means at once, and the ordering is informative in itself: the two methods at the extremes are the weakest (Method A, 4.49) and one of the strongest (Method G, 2.40), so volume alone predicts very little. What separates them is not how much each predicts but how well the budget is spent. Method A's 4.49 columns capture 86.3\% of Tier-1 gold; Method G's 2.40 capture 95.8\%.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image22}
+  \caption[Mean columns predicted per development question, by method, against both gold\ldots]{Mean columns predicted per development question, by method, against both gold standards' own means. Method A predicts 4.49 columns where Tier 1 asks for 1.71, the over-prediction behind its column precision of 0.403. Method G is the most economical at 2.40, below even the Tier-2 requirement of 2.72, which is the other side of the join-omission result of Section~\ref{sec:5-5}.}\label{fig:5-2}
+\end{figure}
+
+Method B (embedding) does not improve on Method A's table precision. At 0.662 against Method A's 0.842 it is in fact lower, since embedding similarity is a noisier table-level signal than exact string matching. What it buys instead is table recall (0.885 against 0.785), which is what carries it to the better table SRR discussed in Section~\ref{sec:6-1} (0.791 against 0.715).
+
+At the column level it is the weakest method of all under Tier-2 SRR (0.469), the single lowest value in Table~\ref{tab:5-1}. Off-the-shelf sentence embeddings, without task-specific fine-tuning (Section~\ref{sec:4-2-2}), struggle most precisely where Tier 2's SQL-derived definition of correctness diverges furthest from surface-level semantic similarity to the question.
+
+Method C (LLM-forward) and Method G (graph) share a distinctive profile: both are excellent Tier-1 linkers and comparatively mediocre Tier-2 ones. Both reach near-perfect Tier-2 table performance (SRR 0.997 and 0.992 respectively) while their Tier-2 column SRR falls to 0.677 and 0.653. They correctly identify which tables are involved and then drop the specific join keys connecting them, a gap invisible at the table level and stark at the column level.
+
+Both also show zero measured hallucination throughout, which is a structural property rather than a fortunate outcome. Method C selects from the schema it is given rather than generating free text, and Method G's predictions can only ever be real tables and columns traversed along real foreign-key edges, so neither has a mechanism by which a nonexistent element could enter its output.
+
+That Method G in particular drops join keys deserves to be confronted rather than merely recorded, since joined tables are precisely what a graph-based method exists to handle. The resolution is that Method G's two outputs are produced by two different mechanisms, and only one of them is a graph.
+
+Its tables come from the foreign-key path search, and there the method performs as its design promises: 0.992 Tier-2 table SRR, statistically indistinguishable from Method C (Section~\ref{sec:5-4}), with the connecting tables inserted by the path search rather than named by the model. Its columns, however, come from the same single LLM call that names the core tables, and that call is instructed by rule 3 (Table~\ref{tab:4-1}) to return only columns appearing in SELECT, WHERE, GROUP BY, HAVING or ORDER BY, which is an instruction to withhold join keys. The graph is never consulted about columns at all.
+
+The method therefore fails at the column level for the same reason Method C does, and it is the prompt rather than the graph that fails. This is a sharper result than a simple weakness would be, because the missing information is demonstrably already present: each foreign-key edge the path search traverses is a pair of columns, and those pairs are exactly the ones the prediction omits. Section~\ref{sec:6-3} develops the point closing that loop is the clearest single improvement this study identifies.
+
+Method D (LLM-backward) is structurally immune to the table/column gap that limits Methods C and G under Tier 2. Because its predictions are read directly out of a parsed SQL query (Section~\ref{sec:4-2-4}) rather than named directly by the model, it achieves 0.923 Tier-2 column SRR and the highest Tier-2 column F1 of any method (0.939).
+
+This robustness carries a small cost: a 0.003 hallucination rate, the only nonzero rate in Table~\ref{tab:5-1} alongside Method E, which inherits it. This is not the model misnaming a column, as this thesis initially assumed. The actual cause, confirmed by inspecting every one of the eleven affected dev queries individually, is a single recurring parsing artifact: the model writes a correct SQL aggregate with a COUNT-style alias, and the sqlglot walker lifts that alias as if it were a real column reference on the table being counted.
+
+Every hallucinated name fits this pattern exactly: concert.\texttt{concert\_count}, players.\texttt{win\_count}, Students.\texttt{enrollment\_count}, \texttt{Transcript\_Contents}.\texttt{transcript\_count}, three separate aliases on \texttt{TV\_Channel} (\texttt{num\_channels}, \texttt{channel\_count}, \texttt{number\_of\_TV\_Channel}), and orchestra.\texttt{format\_count} and orchestra.frequency. Not one is an arbitrary or unrelated invented name, and all eleven are self-flagged in the run log as an \texttt{unknown\_column} parse issue (Section~\ref{sec:5-5}).
+
+A single case shows the whole pattern, and Figure~\ref{fig:5-3} works it through. On dev question 26 (\texttt{concert\_singer}), ``Which year has most number of concerts?'', Method D generated a query that is correct, executes, and answers the question. It is a defensible alternative formulation of the gold SQL, which reaches the same answer with an unaliased ORDER BY count(*).
+
+The sqlglot walk, reading identifiers out of that query, resolves the output alias \texttt{concert\_count} against the only table in scope and records concert.\texttt{concert\_count}, a name that exists nowhere in the schema. The parse is self-flagged in the run log as \texttt{unknown\_column}. The remaining ten cases are the same event with a different alias: players.\texttt{win\_count} (qid 463), students.\texttt{enrollment\_count} (541, 542), \texttt{transcript\_contents}.\texttt{transcript\_count} (571), three aliases on \texttt{tv\_channel} (595, 596, 605, 606) and two on orchestra (850, 851).
+
+Method D's 0.003 hallucination rate is therefore best read as an extraction artifact of this thesis's own SQL walker, not as evidence of the model inventing schema.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image23}
+  \caption[The whole of Method D's hallucination rate, on development question 26]{The whole of Method D's hallucination rate, on development question 26. The model's SQL is correct and executable; the alias \texttt{concert\_count} is an output name, not a schema reference, but the walk resolves it against the only table in scope and emits concert.\texttt{concert\_count}. The walk flags the case itself, as \texttt{unknown\_column}, which is how all eleven were found.}\label{fig:5-3}
+\end{figure}
+
+The eleven cases were inspected individually because they are few enough to permit it. They are not, however, the extent of the failure inspection in this thesis. The analysis reported in Section~\ref{sec:5-5} covers the complete population of 2,107 failure cases across all six methods and both gold tiers, each one resolved to a specific question id, a specific missing or extra element, and a specific cause. Sections 5.5 and 6.4 report those distributions per method; the paragraphs above are concerned only with what the aggregate metrics of Table~\ref{tab:5-1} do and do not show.
+
+Method E (LLM-bidirectional) posts the best Tier-1 column SRR (0.951) and the best Tier-2 column SRR (0.959) of any method. It is the only method that leads both tiers at the column level, and it does so by taking the union of Method C's forward prediction and Method D's backward one (Section~\ref{sec:4-2-5}).
+
+That union is not indiscriminate. Method E predicts 3.16 columns per question at Tier 1 (precision 0.596, recall 0.972, matching Table~\ref{tab:5-1}), fewer than Method A's 4.49 though a broader net than Method G's economical 2.40. This is consistent with Section~\ref{sec:2-3-3}'s account of \citet{cao2024} own finding that a bidirectional union outperforms either direction alone: Method C's Tier-1 strength and Method D's Tier-2 robustness combine rather than cancel.
+
+Method G (graph) is the most economical strong method in Table~\ref{tab:5-1}: it predicts only 2.40 columns per question, fewer than any other method except the weaker Method A and B baselines, while achieving the best Tier-1 column precision (0.698) and Tier-1 column F1 (0.757) of any method, at zero LLM sampling cost beyond its single core-table-identification call (Section~\ref{sec:5-3}).
+
+Spider's four difficulty levels (Section~\ref{sec:3-1}) separate the six methods cleanly. On Tier-1 tables, Method A falls from 0.774 SRR on easy questions to 0.512 on extra-hard, and Method B falls similarly, from 0.948 to 0.536. Both baselines degrade sharply as questions grow more complex, whereas Methods C, E and G are comparatively flat across the same range, holding between 0.928 and 0.992. Difficulty hurts the non-LLM baselines roughly three times as much as it hurts the LLM-touching methods.
+
+Table~\ref{tab:5-2} gives the full picture at the column level, where the pattern sharpens. Under Tier 2, Methods C and G collapse specifically on the hardest questions, falling to 0.392 and 0.313 on extra-hard, statistically indistinguishable from the lexical baseline, while Methods D and E hold 0.801 and 0.892. Figure~\ref{fig:5-4} plots all four strata. The join-omission failure mode identified in Section~\ref{sec:5-5} is concentrated in exactly this stratum: it is not that C and G get worse in general as questions get harder, but that they specifically lose the join columns that harder, more multi-table questions require.
+
+\begin{table}[htbp]
+\centering
+\caption{Strict recall rate by Spider hardness, column level, both tiers. On extra-hard questions. the join-heaviest stratum Methods C and G fall to 0.392 and 0.313 under Tier 2, statistically indistinguishable from the lexical baseline, while D and E hold 0.801 and 0.892.}\label{tab:5-2}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lllllllll@{}}
+\toprule
+ & \multicolumn{4}{c}{\footnotesize\textbf{Tier 1}} & \multicolumn{4}{c}{\footnotesize\textbf{Tier 2}}\tabularnewline
+\cmidrule(lr){2-5}\cmidrule(lr){6-9}
+\textbf{Method} & \textbf{easy} & \textbf{med} & \textbf{hard} & \textbf{extra} & \textbf{easy} & \textbf{med} & \textbf{hard} & \textbf{extra}\tabularnewline
+\midrule
+\textbf{A lexical} & 0.831 & 0.767 & 0.770 & 0.675 & 0.750 & 0.552 & 0.511 & 0.313\tabularnewline
+\textbf{B embedding} & 0.899 & 0.599 & 0.563 & 0.488 & 0.867 & 0.426 & 0.356 & 0.108\tabularnewline
+\textbf{C llm forward} & 0.968 & 0.899 & 0.908 & 0.892 & 0.952 & 0.646 & 0.638 & 0.392\tabularnewline
+\textbf{D llm backward} & 0.960 & 0.935 & 0.914 & 0.873 & 0.972 & 0.939 & 0.925 & 0.801\tabularnewline
+\textbf{E bidirectional} & \textbf{0.980} & \textbf{0.946} & \textbf{0.954} & \textbf{0.916} & \textbf{0.980} & \textbf{0.969} & \textbf{0.971} & \textbf{0.892}\tabularnewline
+\textbf{G graph} & 0.976 & 0.906 & 0.902 & 0.873 & 0.960 & 0.637 & 0.580 & 0.313\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image24}
+  \caption[Column-level strict recall by Spider hardness, one line per method, Tier 1 in\ldots]{Column-level strict recall by Spider hardness, one line per method, Tier 1 in panel (a) and Tier 2 in panel (b). The two panels are the finding: under Tier 1 all four LLM-touching methods stay flat, and under Tier 2 Methods C and G fall away from D and E as the questions get harder.}\label{fig:5-4}
+\end{figure}
+
+Table~\ref{tab:5-2} reports strict recall alone, and the reason is worth stating explicitly rather than leaving to inference: SRR is the only one of this thesis's five metrics that answers the question a downstream generator actually poses, which is not ``how good is this prediction?'' but ``is everything I need in here?'' A generator handed a schema subset missing one join key cannot recover, however high that subset's F1.
+
+\begin{table}[htbp]
+\centering
+\caption{Column-level F1 by hardness, both tiers. The same cells as Table~\ref{tab:5-2}, under a metric that awards partial credit.}\label{tab:5-3}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lllllllll@{}}
+\toprule
+ & \multicolumn{4}{c}{\footnotesize\textbf{Tier 1}} & \multicolumn{4}{c}{\footnotesize\textbf{Tier 2}}\tabularnewline
+\cmidrule(lr){2-5}\cmidrule(lr){6-9}
+\textbf{Method} & \textbf{easy} & \textbf{med} & \textbf{hard} & \textbf{extra} & \textbf{easy} & \textbf{med} & \textbf{hard} & \textbf{extra}\tabularnewline
+\midrule
+A lexical & 0.473 & 0.525 & 0.444 & 0.434 & 0.464 & 0.572 & 0.504 & 0.531\tabularnewline
+B embedding & 0.469 & 0.561 & 0.472 & 0.496 & 0.494 & 0.638 & 0.541 & 0.551\tabularnewline
+C llm forward & 0.719 & 0.795 & 0.705 & 0.668 & 0.762 & 0.858 & 0.798 & 0.795\tabularnewline
+D llm backward & 0.892 & 0.747 & 0.672 & 0.558 & 0.959 & 0.947 & 0.919 & 0.908\tabularnewline
+E bidirectional & 0.708 & 0.729 & 0.650 & 0.552 & 0.768 & 0.930 & 0.890 & 0.900\tabularnewline
+G graph & 0.722 & 0.805 & 0.739 & 0.701 & 0.763 & 0.849 & 0.790 & 0.783\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image25}
+  \caption[How far F1 and strict recall disagree, by method and hardness, on Tier-2\ldots]{How far F1 and strict recall disagree, by method and hardness, on Tier-2 columns. Each bar is F1 minus strict recall for the same predictions. A tall bar means the method is usually nearly complete but rarely exactly complete, which is the near-miss profile of Methods C and G on hard questions.}\label{fig:5-5}
+\end{figure}
+
+The two metrics do not merely differ in strictness; on this data they tell different stories, and Table~\ref{tab:5-3} shows where. Under strict recall, Methods C and G collapse on extra-hard Tier-2 questions, to 0.392 and 0.313. Under F1 the same predictions score 0.795 and 0.783, barely below their own easy-question figures, and far above the lexical baseline they were said to be indistinguishable from.
+
+Both readings are correct, and the gap between them is the finding. C and G's extra-hard predictions are nearly complete, typically missing a single join column out of five or six. That near-miss costs almost nothing under F1 and everything under SRR. Figure~\ref{fig:5-5} shows the size of the divergence for every method and stratum: it reaches 0.470 for Method G on extra-hard Tier-2 columns, the largest in the study.
+
+Which metric is right depends on whether a downstream generator can recover from one missing foreign key, and the schema-linking literature reviewed in Section~\ref{sec:2-4}, \citet{cao2024} and \citet{katsogiannismeimarakis2026} both, assumes it cannot. Table~\ref{tab:5-2} is therefore reported under the assumption that makes the finding meaningful, and Table~\ref{tab:5-3} is reported so that the assumption is visible rather than buried.
+
+\section{Tier 1 vs. Tier 2 Gold-Standard Comparison}\label{sec:5-3}
+
+Section~\ref{sec:3-2} argued that Tier 1 and Tier 2 answer different questions, what a question mentions against what its SQL requires. Table~\ref{tab:5-1} shows the distinction is not merely conceptual but empirically decisive.
+
+Under Tier 1 alone, Methods C, E and G look nearly interchangeable, clustering between 0.917 and 0.951 column SRR. Under Tier 2 the same three methods separate sharply: E leads at 0.959, followed by D at 0.923, then C at 0.677 and G at 0.653. That is a spread of roughly thirty points which a single-tier evaluation would never surface. Figure~\ref{fig:5-6} draws every method's move between the two tiers.
+
+This is the practical argument for this thesis's two-tier design. A method's Tier-1 ranking is not a reliable predictor of its Tier-2 ranking, because the two tiers reward different capabilities: recognizing what a question is about, against recovering the full join structure a correct query actually needs. Only Method D's SQL-parsing design, and Method E's union with it, are robust to both.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image26}
+  \caption[Column-level strict recall under each tier, one line per method]{Column-level strict recall under each tier, one line per method. The four methods that sit within 0.035 of each other under Tier 1 spread over 0.307 under Tier 2. Methods D and E are flat; Methods C and G lose about a quarter of their score. The tier a study picks therefore decides which of these methods it reports as best.}\label{fig:5-6}
+\end{figure}
+
+\section{Statistical Significance (Paired McNemar's Tests)}\label{sec:5-4}
+
+Section~\ref{sec:4-5} defines McNemar's test, applied to eight of the fifteen possible method pairs under the same perfect-recall success criterion as SRR, computed separately per gold-standard tier and level. Table~\ref{tab:5-4} reports the full set: eight method pairs \ensuremath{\times} two tiers \ensuremath{\times} two levels, 32 tests in total, each with its exact discordant-pair counts, test statistic, and p-value. The statistic is the continuity-corrected chi-square where the two discordant counts sum to 25 or more, and the smaller of the two counts, on which the exact binomial test is computed, where they sum to fewer than 25; a statistic of 0 on an exact row therefore marks a fully one-sided split rather than an absence of difference.
+
+Figure~\ref{fig:5-7} plots all thirty-two at once, so the eight non-significant results and the direction of every significant one can be read without going row by row.
+
+\begin{table}[htbp]
+\centering
+\caption{Full paired McNemar results, all eight method pairs, both tiers, both levels (32 tests). Method letters follow Table~\ref{tab:5-1}. ``A-only'' / ``B-only'' are discordant-pair counts questions the first-named method got right and the second got wrong, and vice versa.}\label{tab:5-4}
+\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lllllll@{}}
+\toprule
+\textbf{Pair (A vs B)} & \textbf{Tier} & \textbf{Level} & \textbf{A-only} & \textbf{B-only} & \textbf{Stats.} & \textbf{p-value}\tabularnewline
+\midrule
+\textbf{A vs B} & T1 & table & 122 & 201 & 18.8 & 1.42e-05\tabularnewline
+& & column & 227 & 102 & 46.7 & 8.12e-12\tabularnewline
+& T2 & table & 121 & 196 & 17.3 & 3.24e-05\tabularnewline
+& & column & 194 & 106 & 25.2 & 5.09e-07\tabularnewline
+\textbf{B vs C} & T1 & table & 3 & 192 & 181.3 & 2.58e-41\tabularnewline
+& & column & 21 & 299 & 239.8 & 4.40e-54\tabularnewline
+& T2 & table & 1 & 234 & 229.0 & 9.66e-52\tabularnewline
+& & column & 28 & 243 & 169.0 & 1.23e-38\tabularnewline
+\textbf{B vs G} & T1 & table & 5 & 190 & 173.6 & 1.20e-39\tabularnewline
+& & column & 15 & 294 & 250.1 & 2.46e-56\tabularnewline
+& T2 & table & 4 & 232 & 218.3 & 2.08e-49\tabularnewline
+& & column & 26 & 216 & 147.6 & 5.78e-34\tabularnewline
+\textbf{C vs D} & T1 & table & 17 & 0 & 0.0 & 1.53e-05\tabularnewline
+& & column & 24 & 36 & 2.0 & 0.1556\tabularnewline
+& T2 & table & 14 & 0 & 0.0 & 0.0001\tabularnewline
+& & column & 19 & 273 & 219.2 & 1.35e-49\tabularnewline
+\textbf{C vs E} & T1 & table & 0 & 0 & 0.0 & 1.0000\tabularnewline
+& & column & 0 & 36 & 34.0 & 5.43e-09\tabularnewline
+& T2 & table & 0 & 0 & 0.0 & 1.0000\tabularnewline
+& & column & 0 & 292 & 290.0 & 4.96e-65\tabularnewline
+\textbf{D vs E} & T1 & table & 0 & 17 & 0.0 & 1.53e-05\tabularnewline
+& & column & 0 & 24 & 0.0 & 1.19e-07\tabularnewline
+& T2 & table & 0 & 14 & 0.0 & 0.0001\tabularnewline
+& & column & 0 & 38 & 36.0 & 1.95e-09\tabularnewline
+\textbf{C vs G} & T1 & table & 6 & 2 & 2.0 & 0.2891\tabularnewline
+& & column & 12 & 13 & 0.0 & 1.0000\tabularnewline
+& T2 & table & 6 & 1 & 1.0 & 0.1250\tabularnewline
+& & column & 45 & 20 & 8.9 & 0.0029\tabularnewline
+\textbf{E vs G} & T1 & table & 6 & 2 & 2.0 & 0.2891\tabularnewline
+& & column & 39 & 4 & 26.9 & 2.16e-07\tabularnewline
+& T2 & table & 6 & 1 & 1.0 & 0.1250\tabularnewline
+& & column & 320 & 3 & 309.2 & 3.34e-69\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image27}
+  \caption[All 32 paired McNemar tests]{All 32 paired McNemar tests. Each bar runs from the first method's wins to the second's, so bar length is the size of the disagreement and the side is its direction. Tests that do not reach p \textless{} 0.05 are drawn hatched. The eight hatched bars are the eight non-significant results discussed below.}\label{fig:5-7}
+\end{figure}
+
+Every non-LLM-to-LLM comparison is significant at p \textless{} 10\ensuremath{^{-30}}. Embedding against LLM-forward on Tier-2 columns, for example, is 28 wins to 243 losses (\ensuremath{\chi}\ensuremath{^{2}} = 169, p \ensuremath{\approx} 1.2 \ensuremath{\times} 10\ensuremath{^{-38}}).
+
+Lexical against embedding is significant but modest and direction-dependent. Embedding wins on tables (122 : 201, p \ensuremath{\approx} 1.4 \ensuremath{\times} 10\ensuremath{^{-5}}) and lexical wins on columns (227 : 102, p \ensuremath{\approx} 8.1 \ensuremath{\times} 10\ensuremath{^{-12}}), which is consistent with the complementary error profiles discussed in Section~\ref{sec:6-1}.
+
+8 of the 32 tests are not significant (p \textgreater{} 0.05). Five involve Method G, three against Method C and two against Method E. Two more are Method C against Method E at the table level, where the two methods produce zero discordant pairs at either tier, and the last is Method C against Method D on Tier-1 columns (24 : 36, p = 0.156).
+
+The pattern is itself informative rather than merely null. LLM-forward against graph on Tier-1 tables gives 6 : 2 discordant pairs (p = 0.29): Method G matches Method C's table-level linking without an LLM ever choosing a join table, since the graph search does that instead (Section~\ref{sec:4-2-6}).
+
+The same holds one level down. LLM-forward against graph on Tier-1 columns is the single closest test in the whole table, at 12 : 13 discordant pairs, \ensuremath{\chi}\ensuremath{^{2}} = 0.0 and p = 1.0000, the maximum possible p-value. Methods C and G are statistically indistinguishable on Tier-1 columns as well as on tables. Bidirectional against graph on Tier-1 tables gives the identical 6 : 2 split for the same reason, since Method E's table predictions equal Method C's exactly.
+
+Forward against bidirectional on tables has zero discordant pairs at either tier: adding Method D's predictions to Method C's changes nothing about which tables are found. Method E's entire contribution over Method C is at the column level, where the union wins 292 : 0 on Tier 2 (p \ensuremath{\approx} 5 \ensuremath{\times} 10\ensuremath{^{-65}}). Its advantage over Method G is starker still, at 320 : 3 (p \ensuremath{\approx} 3.3 \ensuremath{\times} 10\ensuremath{^{-69}}), the largest discordant-pair gap in the table.
+
+\section{Error Analysis}\label{sec:5-5}
+
+Every failure in this study was categorized against a fixed set of error categories and linked to a specific question id. The population is complete rather than sampled: all 2,107 failure cases across the six methods and both gold tiers were classified manually, using the same decision criteria throughout, so the distributions reported below are exact rather than estimated.
+
+Table~\ref{tab:5-5} defines the eight categories and Table~\ref{tab:5-6} gives each method's profile against them. Three revisions to this thesis's own prior expectations came out of that pass, and they are worth recording first, because each one changed how the numbers should be read.
+
+First, this thesis's own pre-analysis expectation was to record in the error code before any case was examined, treated join omission as equivalent to any Tier-2-only failure. Closer inspection showed that only 785 of the 1,100 columns present in Tier 2 but not Tier 1 (71.4\%) appeared exclusively in a JOIN ON clause. The analysis was therefore revised to inspect the gold SQL directly rather than infer join omissions from a simple set difference.
+
+Second, the draft assumed that other or corpus-related errors would account for only a small share of failures. The classified errors showed instead that such cases represented 46 to 71\% of Tier-1 failures for the four strongest methods. Removing that assumption substantially changed the interpretation of the remaining errors and motivated the closer examination of benchmark quality.
+
+Third, the draft expected over-linking to dominate the errors made by Methods A and E. The classified errors showed a different pattern: 78 to 93\% of the additional tables predicted by every method were foreign-key neighbours of a gold table, indicating semantic drift rather than genuinely unrelated predictions. Once over-linking was restricted to clearly unrelated schema elements, it appeared primarily as a column-level issue for Method A.
+
+Table~\ref{tab:5-5} defines the eight categories used throughout the pass.
+
+\begin{table}[htbp]
+\centering
+\caption{The eight error categories. Every one of the 2,107 failure cases carries exactly one primary category from this set.}\label{tab:5-5}
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.23\textwidth}>{\raggedright\arraybackslash}p{0.33\textwidth}>{\raggedright\arraybackslash}p{0.34\textwidth}@{}}
+\toprule
+\textbf{Code} & \textbf{Name} & \textbf{What it means}\tabularnewline
+\midrule
+\textbf{LM} & Lexical mismatch & The question's term shares no surface overlap with the correct element's name, so there was nothing to match on.\tabularnewline
+\textbf{UL} & Under-linking & A gold element was missed that is not join-only and not covered by a more specific category.\tabularnewline
+\textbf{JO} & Join omission & Every missed element's only role in the gold SQL is joining.\tabularnewline
+\textbf{AM} & Ambiguous phrase & The question term plausibly maps to more than one element, and the method picked a defensible but wrong one.\tabularnewline
+\textbf{SD} & Semantic drift & The prediction is structurally adjacent to the question, typically a foreign-key neighbour of a gold table.\tabularnewline
+\textbf{OL} & Over-linking & The prediction is in neither tier's gold and has no relation to the question at all.\tabularnewline
+\textbf{HA} & Hallucination & The predicted element does not exist in the schema.\tabularnewline
+\textbf{OT} & Other / corpus error & The case fails for reasons outside the method: the gold is ambiguous, contested, or the two sources disagree.\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+\begin{table}[htbp]
+\centering
+\caption{Share of each method's classified failures by error category, as a percentage of that method's own n. Lexical mismatch disappears entirely once a model is in the loop, and join omission dominates Methods C and G. Categories are defined in Table~\ref{tab:5-5}.}\label{tab:5-6}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llllllllll@{}}
+\toprule
+\textbf{Method} & \textbf{LM} & \textbf{UL} & \textbf{JO} & \textbf{AM} & \textbf{SD} & \textbf{OT} & \textbf{HA} & \textbf{OL} & \textbf{n}\tabularnewline
+\midrule
+\textbf{A lexical} & 35.2 & 25.3 & 11.5 & 14.1 & 11.0 & 3.0 & -- & -- & 566\tabularnewline
+\textbf{B embedding} & 8.7 & 61.1 & 14.2 & 1.9 & 10.5 & 3.6 & -- & -- & 583\tabularnewline
+\textbf{C llm forward} & -- & 10.4 & 67.7 & 2.5 & 6.8 & 12.6 & -- & -- & 365\tabularnewline
+\textbf{D llm backward} & -- & 23.6 & 16.5 & 9.4 & 9.4 & 40.2 & 0.8 & -- & 127\tabularnewline
+\textbf{E bidirectional} & -- & 10.7 & 14.3 & 11.9 & 13.1 & 50.0 & -- & -- & 84\tabularnewline
+\textbf{G graph} & -- & 12.0 & 67.5 & 2.6 & 6.3 & 11.5 & -- & -- & 382\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image28}
+  \caption[The distribution of classified recall failures]{The distribution of classified recall failures. Panel (a) gives each method's own profile. The three LLM-touching methods show no lexical mismatch at all, join omission dominates Methods C and G, and gold-standard disagreement dominates Methods D and E. Panel (b) gives the same categories by Spider hardness, showing join omission rising from 7.2\% of easy-question failures to 35.1\% on medium and 37.9\% on extra-hard, while lexical mismatch stays roughly flat.}\label{fig:5-8}
+\end{figure}
+
+Figure~\ref{fig:5-8} renders Table~\ref{tab:5-6} as profiles rather than rows, which makes two patterns visible that the table states only implicitly. The first is that the six methods do not lie on a single quality axis: Methods A and B fail mostly by not finding things, Methods C and G by finding everything except the join keys, and Methods D and E by being scored against gold elements their predictions had no way to recover.
+
+The second is that hardness sharpens these profiles without reordering them (panel b). Join omission grows with question complexity because multi-table SQL is where joins live, while lexical mismatch stays roughly flat.
+
+Three findings follow from Table~\ref{tab:5-6}, each answering part of the question the aggregate metrics leave open. First, Methods C and G are join-omission machines: 67.7\% and 67.5\% of their failures are join omissions, otherwise-perfect predictions that dropped the connecting keys.
+
+The dominant sub-pattern, tagged one-sided-fk and the single most common tag in the study at 742 cases, is that the method predicts the child-side foreign-key column and omits the parent key it points at. It is a systematic blind spot rather than scattered noise, and it is exactly what Tier-2 evaluation (Section~\ref{sec:3-2-2}) was designed to expose.
+
+A representative case: on \texttt{concert\_singer} question 22, Method C's forward prediction is missing only stadium.\texttt{stadium\_id}, every other required element being correct, and the recorded rationale states plainly that the sole remaining miss is a foreign key with no other role in the query. The same one-sided pattern recurs on question 31, where Method C additionally predicts an unneeded extra table (\texttt{singer\_in\_concert}) alongside the same missing join key, over-inclusion and join omission occurring in the same prediction.
+
+Second, the embedding ceiling is a budget problem, not a semantics problem. 61.1\% of Method B's failures are under-linking, with a cutoff tag on 484 cases, and of its Tier-1 column misses, 375 cleared the similarity threshold and lost only to the \texttt{column\_top\_k} = 3 cap. Only 92 fell below the threshold at all.
+
+Questions 2 and 3, both against \texttt{concert\_singer}, show the shape directly. Method B misses singer.name and singer.country respectively, while still predicting singer.\texttt{singer\_id} and the \texttt{singer\_in\_concert} table: the encoder ranked the right table correctly but let the specific gold column fall just outside its \texttt{column\_top\_k} = 3 cutoff. The encoder usually knows the right answer and the operating point throws it away, so raising k is a larger lever than a better encoder would be.
+
+Third, for Methods D and E the gold standard itself is the largest single error source. Other or corpus error accounts for 40.2\% of Method D's failures and 50.0\% of Method E's, cases where Tier-1 gold names an element the gold SQL never references.
+
+Questions 6 and 7, also against \texttt{concert\_singer}, are representative: Method E is missing singer.name in both, classified as corpus error because that element is absent from the gold SQL entirely. Question 6 is the same case examined directly in Section~\ref{sec:3-2}'s worked example, where Taniguchi et al.'s annotation marks singer.Name for a question whose SQL actually selects \texttt{song\_name}. Section~\ref{sec:3-2}'s illustration of tier divergence and this section's classified failure are the same underlying event, seen from two different angles.

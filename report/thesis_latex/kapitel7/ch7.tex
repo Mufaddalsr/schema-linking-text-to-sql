@@ -1,0 +1,48 @@
+\chapter{Conclusion and Future Work}\label{ch:7}
+
+This thesis set out to compare six schema linking method families, lexical, embedding-based, three LLM-based reasoning directions, and graph-based, under one shared protocol, one dataset, and a common set of metrics, addressing the absence of exactly this kind of controlled comparison.
+
+This chapter summarizes what was found against the key questions posed, restates this thesis's contributions in light of what is complete and what remains outstanding, and sets out the work that follows from it.
+
+\section{Summary of Findings}\label{sec:7-1}
+
+Schema linking on Spider is not one task with one number. Measured against what the question mentions, four of the six methods are effectively at ceiling: Methods C, D, E and G sit between 0.916 and 0.951 column strict recall, a spread of 0.035.
+
+Measured against what the SQL actually needs, the same four methods spread across thirty points of strict recall, and the ordering is determined almost entirely by one structural property: whether the method's output passed through a real SQL query on its way out.
+
+The strongest practical result is that backward extraction beats direct prompting. Asking a small, cheap model for a throwaway SQL query and parsing the links out of it outperformed asking the same model for the links directly, on the metric that governs downstream executability, at half the cost.
+
+The strongest methodological result is that a benchmark's residual error can come to be dominated by its own annotation long before anyone notices. Here that happens at around 0.92 strict recall, a level several published systems already exceed.
+
+\section{Contributions}\label{sec:7-2}
+
+This thesis claimed four contributions at the outset (Section~\ref{sec:1-3}). This section restates each and assesses it against what Chapters 3 through 6 actually delivered.
+
+\begin{itemize}
+\item
+  A hybrid, two-tier gold-standard schema-linking annotation for Spider. Delivered in full (Chapter~\ref{ch:3}): Tier 1 draws on \citet{taniguchi2021} complete annotated development set; Tier 2 is extracted programmatically via sqlglot across both training and development splits. Both tiers were used throughout Chapter~\ref{ch:5}'s evaluation, and Section~\ref{sec:5-3}'s tier-asymmetry finding is a direct product of having built both.
+\item
+  A shared linker protocol that all six evaluated methods implement. Delivered in full (Section~\ref{sec:4-3-1}): all six methods return predictions through the same interface, scored by the same evaluator, which is what made Chapter~\ref{ch:5}'s like-for-like comparison possible rather than six separate, potentially inconsistent evaluation scripts.
+\item
+  An evaluation framework combining five metrics with McNemar's test. Delivered in full: precision, recall, F1, SRR and F6 are computed and reported for every method and gold-standard tier (Chapter~\ref{ch:5}), and the McNemar significance tests are run and reported for all eight method pairs across both tiers and both levels, 32 tests in total (Section~\ref{sec:5-4}). The one piece of this contribution an earlier draft had marked as outstanding is now complete.
+\item
+  A controlled empirical comparison of six schema linking method families under an explicit cost budget. Delivered (Chapter~\ref{ch:5}; Section~\ref{sec:6-2}): all six families were compared under identical conditions, for a total measured cost of \$11.89, and that cost data is itself one of this thesis's findings rather than merely a constraint that was satisfied.
+\end{itemize}
+
+\section{Future Work}\label{sec:7-3}
+
+\textbf{Close the loop in the graph method.} Method G already computes a foreign-key path between the tables a question needs, and every edge on that path is a pair of columns. It does not emit them: its columns come from the same model call that names its core tables, and that call is instructed to withhold join keys. Of the 657 Tier-2 columns Method G fails to predict, 585 (89.0\%) lie on an edge between two tables its own search already walked.
+
+Emitting them requires no model call and no information the method does not already hold, and would raise its Tier-2 column strict recall from 0.653 to 0.947 at a precision cost of one thousandth (Section~\ref{sec:6-3}). That is the largest single improvement this study identifies, and the cheapest. It is listed first for both reasons.
+
+\textbf{Combine the two training-free baselines.} Section~\ref{sec:6-1} showed that Methods A and B fail in near-complementary ways: Method A's failures are dominated by lexical mismatch, which an encoder handles, while Method B's are dominated by rank truncation of elements it had already scored correctly. A hybrid that keeps Method B's semantic scoring but adopts Method A's generosity at the retrieval stage, by raising or removing the top-k cap, is the obvious unexplored point between them. Section~\ref{sec:4-4-1}'s tuning grid suggests the cap rather than the threshold is the binding constraint, so this is a cheap experiment.
+
+\textbf{Run the deferred open-model ablation, and evaluate on a messier benchmark.} Both were excluded from this thesis's scope, and both bear on how far the findings generalize. The open-model ablation would separate the broad claim that LLMs solve this task from the narrower possibility that these results are specific to Claude Haiku 4.5. Testing on a less curated benchmark such as BIRD would show whether Spider's relatively clean, English-native schemas are part of why Method A performs as well as it does at the column level.
+
+\textbf{Scale to real-world databases.} Spider's schemas average 5.28 tables and 27.13 columns (Section~\ref{sec:3-1}), small enough that every method evaluated here can be shown the entire schema in one prompt. Production databases routinely run to hundreds of tables with abbreviated or legacy naming, undeclared or partial foreign keys, and no curated gold SQL to grade against. That setting changes the problem rather than merely scaling it: once the full schema no longer fits in context, retrieval becomes part of the linker rather than a step it can skip, which is the regime LinkAlign (Wang, Liu, \& Yang, 2025) and AutoLink \citep{wang2025b} were built for. Whether the ranking measured here survives that shift, and in particular whether Method G's graph search gains or loses ground when the foreign-key graph is large and incompletely declared, is the most consequential open question this thesis leaves.
+
+\textbf{Measure downstream execution accuracy.} Deliberately cut from this thesis's scope, this is the natural next study. It would test whether the thirty-point Tier-2 spread measured here at the linking stage translates into generated-SQL correctness. That assumption underpins the whole schema-linking literature reviewed in Chapter~\ref{ch:2}, and this thesis measures its input rather than its output.
+
+Taken together, the findings of this thesis provide clear and statistically supported answers to its research questions. The work was motivated by the gap between schema linking's well-established importance to Text-to-SQL performance (Chapter~\ref{ch:1}) and the inconsistent, difficult-to-compare ways it has been evaluated in the literature (Chapter~\ref{ch:2}).
+
+By evaluating six methods under a common protocol, against two explicit definitions of what a correct link is, this study closes part of that gap. More broadly, the results show the value of treating schema linking as an evaluation problem in its own right, rather than only as an intermediate component of an end-to-end Text-to-SQL system.

@@ -1,0 +1,78 @@
+%%
+%% Englische Fassung der BHT-Titelseite
+%%
+%% bhtThesis.sty bleibt unveraendert; hier wird nur \bhtTitelSeiteNeu
+%% (das \maketitle aufruft) neu definiert:
+%%   * englischer Wortlaut
+%%   * Titel/Untertitel in Schwarz statt BHT-Blau
+%%   * Serifenschrift des Dokuments statt der BHT-Hausschrift (phv)
+%% Logos, Farbelemente und Abstaende bleiben wie im Original.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\renewcommand{\headcolor}{black}
+
+\renewcommand{\bhtTitelSeiteNeu}
+    {
+      \thispagestyle{empty}
+      \parindent=0pt
+      %%
+      \begin{minipage}[b]{0.75\textwidth}
+        ~\\\vspace{10ex}
+
+        \raggedright
+        \textcolor{\headcolor}{\LARGE\bfseries\thetitel}\\[3.5ex]
+        \textcolor{\headcolor}{\Large\itshape\theuntertitel}
+      \end{minipage}
+      \begin{minipage}[b]{0.25\textwidth}
+        \raggedleft
+        \includegraphics[width=0.6\textwidth]{\hslogoV}
+      \end{minipage}
+      \vfill
+      %%
+      \begin{minipage}[b]{0.8\textwidth}
+        \raggedright
+        Submitted by:\\
+        \textbf{\theautor}\\
+        \textbf{Matriculation No: \theedvnr}\\
+        to the Department \thefachbereich\\
+        of Berliner Hochschule f\"ur Technik\\[4ex]
+        A thesis submitted in partial fulfillment\\
+        of the requirements for the degree of\\
+        \textbf{\theabschluss}\\
+        in study program\\
+        \textbf{\thestudiengang}\\[4ex]
+        Date of submission: \textbf{\thedatum}
+      \end{minipage}
+      \hfill
+      \begin{minipage}[b]{0.1\textwidth}
+        \centering
+        \includegraphics[scale=1]{BHT-Elements}\\[30ex]
+      \end{minipage}
+      \vfill
+      %%
+      \begin{minipage}[b]{0.7\textwidth}
+        \ifthenelse{\boolean{@entwurfset}}
+            {
+              \begin{tiny}
+                \raggedright
+                \ifthenelse{\boolean{@versionset}}
+                     {Version \theversion\\}
+                     {}
+                \ifthenelse{\boolean{@versionsdatum}}
+                     {last change: \today \\}
+                     {}
+              \end{tiny}
+              \vfill~
+            }
+            {
+              ~\hfill~
+            }
+
+            \hspace{-1.5ex}{\thebetreuerFeld}
+      \end{minipage}
+      \hfill
+      \begin{minipage}[b]{0.1\textwidth}
+        \centering
+        \includegraphics[scale=1.4]{BHT-Studiere-vertikal}
+      \end{minipage}
+    }

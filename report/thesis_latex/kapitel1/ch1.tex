@@ -1,0 +1,34 @@
+\chapter{Introduction}\label{ch:1}
+
+\section{Motivation}\label{sec:1-1}
+
+Relational databases store the majority of the world's structured information, but querying them requires fluency in SQL, a barrier that excludes the vast majority of potential users. Text-to-SQL systems address this barrier by translating natural language questions directly into executable SQL queries, and the task has attracted sustained attention from both the natural language processing and database communities \citep{qin2022,liu2024}. As the large language models (LLMs) powering modern Text-to-SQL systems have grown more capable, a persistent bottleneck has moved into focus: real-world database schemas can span hundreds of tables and thousands of columns, far more than can be usefully placed in a single prompt, and far more than any one question actually needs. Schema linking - identifying which tables and columns in a schema are relevant to a given question - has therefore become a critical sub-task within the Text-to-SQL pipeline.
+
+The arrival of long-context LLMs has complicated, rather than resolved, this picture. \citet{maamari2024} argue that for sufficiently capable models with schemas that fit comfortably in context, explicit schema linking may cost more accuracy than it saves, since imperfect filtering risks excluding a column the model actually needed. Yet even that work concedes the opposite holds for smaller or weaker models, and for schemas that do not fit in context at all - a scenario that is the norm rather than the exception in enterprise settings, where databases with thousands of columns are common \citep{wang2025b}. Schema linking, in other words, has not become obsolete; its value has become conditional - on model capability, schema scale, and deployment cost - and that conditionality is precisely what makes a controlled comparison of methods useful now.
+
+Despite this proliferation of methods, direct comparison between them remains difficult. Most papers introduce one new method and compare it against a small, non-uniform set of baselines, under whatever gold-standard definition and metric set that paper's authors happened to adopt. \citet{glass2025} note explicitly that no standard metric for schema linking evaluation exists: some works report ROC-AUC, others report precision and recall, and even the ground truth those metrics are computed against differs from paper to paper. \citet{katsogiannismeimarakis2026} raise a related concern specifically for LLM-based linkers, showing that basic design choices - how many few-shot demonstrations to use, how many outputs to sample - shift the precision-recall trade-off substantially, in ways that are easy to miss without systematic ablation. The result is a literature in which it is genuinely difficult to say, with any confidence, how a cheap lexical baseline actually compares to an LLM-based linker, or whether the added cost of an LLM call is justified by the accuracy it buys.
+
+\section{Problem Statement}\label{sec:1-2}
+
+Despite broad agreement that schema linking materially affects Text-to-SQL performance, no existing study evaluates the major families of schema linking methods - lexical, embedding-based, and the several distinct ways an LLM can be used (reasoning forward from the question, backward from a draft query, or bidirectionally), alongside graph-based approaches - on a common dataset, against a common gold standard, under a common set of metrics. This absence of a controlled, like-for-like comparison leaves basic practical questions unresolved: how much accuracy an LLM-based linker actually buys over a cheap lexical or embedding baseline, whether that gap is large enough to justify the added latency and API cost, and whether a graph-based method offers a viable lower-cost alternative to LLM-based reasoning at all. This thesis addresses these questions by isolating schema linking from the rest of the Text-to-SQL pipeline and evaluating six representative methods under one shared protocol, so that differences in measured performance and in error pattern can be attributed to the linking method itself rather than to confounding differences in SQL generation, execution, or fine-tuning procedure.
+
+\section{Scope and Contributions}\label{sec:1-3}
+
+This thesis is deliberately scoped to the schema linking sub-task in isolation. It does not address full Text-to-SQL query generation, does not fine-tune any language or embedding model, and does not evaluate execution accuracy of downstream SQL. This narrower scope is a deliberate methodological choice: by holding the rest of the Text-to-SQL pipeline fixed and out of scope, differences observed between methods can be attributed to schema linking quality specifically, rather than to interactions with a particular SQL generator, decoding strategy, or fine-tuning regime. All experiments are conducted on the Spider dataset \citep{yu2018}, the most widely used cross-domain benchmark for this line of research.
+
+\section{Thesis Structure}\label{sec:1-4}
+
+The remainder of this thesis is organized as follows.
+
+Chapter~\ref{ch:2} reviews related work on Text-to-SQL and schema linking in greater depth, situating the six method families evaluated here within the broader literature and identifying the specific evaluation gaps this thesis addresses.
+
+Chapter~\ref{ch:3} describes the Spider dataset and the construction of the hybrid two-tier gold standard, including the provenance and limitations of each tier.
+
+Chapter~\ref{ch:4} presents methodology: a formal problem formulation, each of the six schema linking methods together with its exact implementation and tuning, the shared linker protocol and SQL-parsing infrastructure they have in common, the evaluation metrics and statistical test used throughout, and the cost-management and reproducibility framework governing every LLM call.
+
+Chapter~\ref{ch:5} reports results across all methods, metrics, and gold-standard tiers, together with paired significance testing and a full error.
+
+Chapter~\ref{ch:6} discusses what those results mean, organized around this thesis's research questions, and considers the study's limitations and threats to validity.
+
+\enlargethispage{4\baselineskip}
+Chapter~\ref{ch:7} concludes with a summary of findings, contributions, and directions for future work.\footnote{All code, configuration, prompts, predictions, and result tables underlying this thesis are publicly available at \url{https://github.com/Mufaddalsr/schema-linking-text-to-sql}.}

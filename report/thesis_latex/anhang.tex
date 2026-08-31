@@ -1,0 +1,144 @@
+\chapter{Gold-Link JSON Schema}\label{app:A}
+
+Both gold-standard tiers (Chapter~\ref{ch:3}) are materialized as JSON files keyed by Spider question ID, one entry per question, in the canonical shape shown below, question id "0" (``How many singers do we have?'', database \texttt{concert\_singer}):
+
+\begin{lstlisting}[language=,caption={Canonical gold-link record, question id 0.},label=lst:goldlink]
+{
+"db_id": "concert_singer",
+"tables": [
+"singer"
+],
+"columns": []
+}
+\end{lstlisting}
+
+``columns'' holds {[}table, column{]} pairs rather than bare column names, so a column reference remains unambiguous even when the same column name is reused across tables in a schema.
+
+\chapter{Prompt Templates for LLM-Based Methods}\label{app:B}
+
+The system prompts below are the exact, locked text used to produce this thesis's reported results, reproduced verbatim. Each method also uses two fixed few-shot examples (one single-table pattern, one multi-table join pattern), drawn from Spider train and excluded from every iteration and evaluation set so no method is ever tested on an example baked into its own prompt.
+
+\section{Method C - \texttt{forward\_v1}}\label{app:B-1}
+
+\begin{lstlisting}[language=,caption={System prompt \texttt{forward\_v1} (Method C).},label=lst:app-b1]
+You extract the tables and columns from a database schema that are relevant to answering a natural-language question.
+
+Rules:
+1. Use ONLY tables and columns that appear in the provided schema.
+2. Return every table you need. Return every column you need.
+3. Do NOT return columns whose ONLY purpose is joining tables together - return only columns that would appear in SELECT, WHERE, GROUP BY, HAVING, or ORDER BY of the target SQL.
+4. Output ONLY a JSON object with keys "tables" (list of strings) and "columns" (list of [table_name, column_name] pairs). No prose, no explanation, no markdown fences.
+\end{lstlisting}
+
+A revised \texttt{forward\_v2}, rewriting rule 3 to state the inclusion criterion positively (``a table or column must correspond to something the target SQL actually references\ldots'') rather than only negatively, was drafted and re-run on the same 20-example train iteration set. It did not reproducibly outperform \texttt{forward\_v1}, across repeated iteration runs the two versions' aggregate F1 gap (0.005--0.008) flipped sign three times, smaller than this 20-example set's own noise floor and \texttt{forward\_v1} was retained as the frozen prompt for the reported dev run.
+
+\section{Method G - \texttt{graph\_endpoint\_v1}}\label{app:B-2}
+
+\begin{lstlisting}[language=,caption={System prompt \texttt{graph\_endpoint\_v1} (Method G).},label=lst:app-b2]
+You identify the 1 to 3 core tables and the specific columns needed from a database schema to answer a natural-language question.
+
+Rules:
+1. Return between 1 and 3 core tables. Prefer fewer.
+2. Do NOT include tables that only exist to join others - those will be added automatically by a graph algorithm.
+3. For columns, return only those that would appear in SELECT, WHERE, GROUP BY, HAVING, or ORDER BY of the target SQL. Not join columns.
+4. Every table and column must be from the provided schema.
+5. Output ONLY a JSON object with keys "core_tables" (list of 1-3 strings) and "columns" (list of [table_name, column_name] pairs).
+\end{lstlisting}
+
+A revised \texttt{graph\_endpoint\_v2}, adding an explicit join-only test to rule 2, was drafted and tested the same way; it likewise produced no reproducible improvement on the 20-example train iteration set, and \texttt{graph\_endpoint\_v1} was retained.
+
+\section{Method D - \texttt{backward\_v1}}\label{app:B-3}
+
+\begin{lstlisting}[language=,caption={System prompt \texttt{backward\_v1} (Method D).},label=lst:app-b3]
+You are a SQL expert. Given a database scheme and a natural-language question, generate a single SQL query that would answer the questions.
+
+Rules:
+1. Use ONLY tables and columns that appear in the provided schema.
+2. Return only the SQL query. No explanation, no markdown fences, no prose
+3. Do not add comments inside the SQL.
+4. If the question is ambiguous, choose the most literal interpretation.
+\end{lstlisting}
+
+Method D's prompt instructs Claude Haiku 4.5 to generate a single SQL query answering the question against the full rendered schema, with no self-consistency and no output-format rules beyond producing valid SQL, the schema-linking prediction is then read off that generated query by the same sqlglot-based extractor used for Tier 2 gold (Section~\ref{sec:3-2-2}), rather than by any rule in the prompt itself.
+
+\chapter{Further Worked Schema-Linking Examples}\label{app:C}
+
+Figure~\ref{fig:3-5} shows the core divergence between the two gold tiers on one question, and Figure~\ref{fig:3-11} the reverse case. The three figures below complete the set, in the same form: each adds one construct the sqlglot walk of Section~\ref{sec:3-2-2} must handle. All five are generated from the released gold files rather than transcribed, so a figure cannot claim a link the gold standard no longer holds.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image29}
+  \caption[Development question 12 (\texttt{concert\_singer}): the straightforward case, in which\ldots]{Development question 12 (\texttt{concert\_singer}): the straightforward case, in which every element the gold SQL touches is also named in the question, so the two tiers hold exactly the same links. Note that avg(age) contributes age, the column underneath the aggregate, and that the subquery is descended into rather than skipped.}\label{fig:C-1}
+\end{figure}
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image30}
+  \caption[Development question 898 (\texttt{network\_1}): a set operation, with each branch of\ldots]{Development question 898 (\texttt{network\_1}): a set operation, with each branch of the query visited separately by the walk.}\label{fig:C-2}
+\end{figure}
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image31}
+  \caption[Development question 77 (\texttt{pets\_1}): a three-table join whose bridge table the\ldots]{Development question 77 (\texttt{pets\_1}): a three-table join whose bridge table the question never names, the case that produces the 88 tables Tier 2 holds and Tier 1 lacks (Section~\ref{sec:3-3}).}\label{fig:C-3}
+\end{figure}
+
+\chapter{Implementation Reference}\label{app:D}
+
+Section~\ref{sec:4-3} describes the three components every method shares: the linker protocol, the SQL-parsing utility, and the LLM client. The two tables below record where that code lives and which third-party libraries it depends on. They are reference material rather than argument, which is why they sit here rather than in the chapter itself.
+
+\begin{table}[htbp]
+\centering
+\caption{The codebase, by role. Roughly 16,100 lines of Python under src/\texttt{schema\_linking}/, exercised by 740 tests under tests/.}\label{tab:D-1}
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.23\textwidth}>{\raggedright\arraybackslash}p{0.33\textwidth}>{\raggedright\arraybackslash}p{0.34\textwidth}@{}}
+\toprule
+\textbf{Role} & \textbf{Module} & \textbf{What it does}\tabularnewline
+\midrule
+Contract & base.py & The Linker protocol, the Prediction record, and the score records\tabularnewline
+Data & \texttt{data\_loader}.py, \texttt{schema\_parser}.py & Load Spider's JSON into typed records; build Schema objects, excluding the wildcard column at source (Section~\ref{sec:3-2-2})\tabularnewline
+Gold & \texttt{gold\_link\_extractor}.py, \texttt{taniguchi\_loader}.py & Tier 2 by sqlglot walk; Tier 1 by the Taniguchi join and its id-offset fallback (Section~\ref{sec:3-2-1})\tabularnewline
+Method A & \texttt{lexical\_linker}.py & Substring / token / fuzzy matching\tabularnewline
+Method B & \texttt{embedding\_linker}.py, utils/embeddings.py & Encoder, rendering rules, per-database vector cache, top-k + threshold\tabularnewline
+Methods C, D, E & \texttt{llm\_linker}.py, utils/prompts.py, utils/fewshot.py & Prompt registry, self-consistency voting, SQL-backward extraction, the C\ensuremath{\cup}D union\tabularnewline
+Method G & \texttt{graph\_linker}.py, utils/graph.py & Endpoint resolution, shortest path, greedy Steiner approximation\tabularnewline
+Shared SQL & utils/\texttt{sql\_parsing}.py & One sqlglot walk in strict and permissive modes (Section~\ref{sec:4-3-2})\tabularnewline
+Evaluation & evaluator.py, utils/statistical.py & P/R/F1/F6/SRR/HR, macro and micro; McNemar's test\tabularnewline
+Tuning & utils/tuning.py, utils/difficulty.py & The Method A sweep and the Method B grid; Spider hardness labels\tabularnewline
+Cost & utils/\texttt{llm\_client}.py & Retries, the JSONL call ledger, the per-model pricing table\tabularnewline
+Error analysis & \texttt{error\_analysis}.py, \texttt{auto\_coder}.py, \texttt{gold\_audit}.py & The codebook cascade of Section~\ref{sec:5-5} and the Tier-1 gold audit\tabularnewline
+Config & utils/config.py, config.yaml & Every path, threshold and pinned model revision in one file\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+\begin{table}[htbp]
+\centering
+\caption{Third-party libraries, and why each was chosen.}\label{tab:D-2}
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.23\textwidth}>{\raggedright\arraybackslash}p{0.33\textwidth}>{\raggedright\arraybackslash}p{0.34\textwidth}@{}}
+\toprule
+\textbf{Library} & \textbf{Used for} & \textbf{Why this one}\tabularnewline
+\midrule
+sqlglot & Every SQL parse - Tier 2 gold and Method D alike & A real dialect-aware parser with an inspectable AST; regex or sqlparse cannot resolve aliases, subqueries, or set operations (Table~\ref{tab:3-1}).\tabularnewline
+rapidfuzz & Method A's fuzzy strategy &\tabularnewline
+sentence-transformers + torch & Method B's encoder & Reference implementation for BGE checkpoints, with revision pinning.\tabularnewline
+networkx & Method G's foreign-key graph & Standard shortest-path primitives; the graph is built once per schema.\tabularnewline
+anthropic + tenacity & Methods C, D, and G & Official API client; tenacity supplies the typed retry policy described in Section~\ref{sec:4-3-3}.\tabularnewline
+pandas, numpy & Every results table and sweep & ---\tabularnewline
+scipy, statsmodels & McNemar's test (Section~\ref{sec:4-6}) & Exact binomial test on the discordant cells.\tabularnewline
+scikit-learn & Cohen's \ensuremath{\kappa} for the error-analysis agreement pass & ---\tabularnewline
+matplotlib & Every figure & ---\tabularnewline
+pytest & Creating Tests cases & Every metric, extractor, and parsing rule in Table~\ref{tab:3-1} is pinned by a test.\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}

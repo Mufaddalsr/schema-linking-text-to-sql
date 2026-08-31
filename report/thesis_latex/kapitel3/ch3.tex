@@ -1,0 +1,308 @@
+\chapter{Dataset and Gold-Standard Construction}\label{ch:3}
+
+Every metric reported in this thesis is computed against a gold standard, so how that standard is constructed determines what the results in Chapter~\ref{ch:5} can be said to measure.
+
+Section~\ref{sec:3-1} describes the Spider dataset as this thesis's own pipeline loads it, together with the constraint that shapes every choice downstream: gold SQL is released for the training and development splits but withheld for the test split. Section~\ref{sec:3-2} sets out the two gold-link tiers - Tier 1, from \citet{taniguchi2021} human annotations of what a question mentions, and Tier 2, extracted with sqlglot from what the gold SQL references.
+
+The two are kept as parallel standards rather than merged, since a method's ranking is a stronger claim when it survives both. Section~\ref{sec:3-3} reports what Tier 2 actually contains, which is where the two tiers diverge and why. Section~\ref{sec:3-4} closes with the verified statistics for the corpus and both tiers.
+
+\section{The Spider Dataset}\label{sec:3-1}
+
+All experiments in this thesis are conducted on Spider \citep{yu2018}, a large-scale, cross-domain benchmark for Text-to-SQL parsing. Spider spans 200 databases across 138 distinct domains, with no database shared across the training, development, and test splits, a design intended to test generalization to unseen schemas rather than memorization of a fixed database \citep{yu2018,qin2022}.
+
+Reported example counts vary slightly across papers depending on the Spider release cited. \citet{taniguchi2021}, whose annotations this thesis draws on directly for its Tier 1 gold standard, report 8,625 training examples, 1,034 development examples, and 2,147 test examples. This thesis's own data-loading code loads 7,000 training examples over 140 databases and 1,034 development examples over 20 databases, for 166 confirmed database schemas in total.
+
+The 7,000 figure corresponds to Spider's \texttt{train\_spider}.json file specifically. It excludes a further \textasciitilde1,600 examples that some releases bundle in from five earlier single-domain datasets, which this thesis's pipeline does not load. Each query in Spider is further labeled with one of four difficulty levels - easy, medium, hard, and extra hard - based on the number of SQL components, selections, and conditions it contains \citep{yu2018}.
+
+Spider's schemas vary enormously in size. Across the 166 schemas this thesis's pipeline loads, the mean is 5.28 tables and 27.13 columns per database (SD 3.87 / 30.80), ranging from three two-table databases up to \texttt{baseball\_1}'s 26 tables and 352 columns by a wide margin the largest schema in the benchmark. Figure~\ref{fig:3-1} shows the full distribution: in both panels the mean sits well right of the median, and for columns the standard deviation exceeds the mean.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image1}
+  \caption[Database size across the 166 schemas in Spider's tables.json]{Database size across the 166 schemas in Spider's tables.json. tables (a) and columns (b) per database. The mean (solid rule) sits right of the median (dashed) in both panels; \texttt{baseball\_1} is the extreme at 26 tables and 352 columns.}\label{fig:3-1}
+\end{figure}
+
+The questions themselves are short. Dev questions average 12.43 words, with a median of 12 and a range of 4 to 28, and the difficulty labels are weighted towards the middle: 446 of the 1,034 dev questions (43.1\%) are medium, against 248 easy (24.0\%), 174 hard (16.8\%) and 166 extra hard (16.1\%). Figure~\ref{fig:3-2} gives both distributions. They matter later, Section~\ref{sec:3-3} shows that the gap between the two gold tiers is almost entirely a property of the harder end of this distribution.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image2}
+  \caption[The 1,034 Spider development questions]{The 1,034 Spider development questions. (a) Length in words, which is short and tightly concentrated mean 12.43, median 12, range 4 to 28. (b) The Spider hardness label, which is weighted towards medium.}\label{fig:3-2}
+\end{figure}
+
+At the SQL-structure level, the queries this thesis's gold standard is built from are dominated by simple filtering. 46.2\% of dev queries contain a WHERE clause, 26.2\% a GROUP BY and 22.3\% an ORDER BY, with smaller shares carrying a HAVING clause (7.3\%), a LIMIT (17.7\%), or a set operation - UNION, INTERSECT or EXCEPT at 7.4\% combined.
+
+This distribution is why join-heavy, multi-table reasoning is concentrated in a minority of questions, and it is exactly that minority where the largest gaps exist. Figure~\ref{fig:3-3} gives the per-clause shares, and Figure~\ref{fig:3-4} the pairwise co-occurrences behind them, notably that WHERE and GROUP BY appear together on only 18 questions.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image3}
+  \caption[Share of the 1,034 development queries carrying each SQL construct]{Share of the 1,034 development queries carrying each SQL construct. SET OP folds UNION, INTERSECT and EXCEPT together; presence is read from Spider's own parsed sql dict.}\label{fig:3-3}
+\end{figure}
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image4}
+  \caption[Clause co-occurrence across the 1,034 development queries]{Clause co-occurrence across the 1,034 development queries. Blue cells are joint counts, the grey diagonal each clause's own total; WHERE and GROUP BY co-occur on only 18 queries.}\label{fig:3-4}
+\end{figure}
+
+A constraint that shapes this thesis's entire gold-standard design follows directly from how Spider is distributed. Gold SQL queries are publicly released for the training and development splits, but not for the test split, which is withheld for leaderboard evaluation \citep{taniguchi2021}.
+
+Since this thesis's programmatically extracted gold standard (Tier 2, Section~\ref{sec:3-2-2}) is derived by parsing gold SQL text, it can only be constructed where that SQL is actually available, the training and development splits. This thesis therefore evaluates exclusively on Spider's training and development data. No result in this thesis should be read as measured against Spider's official hidden test set or leaderboard.
+
+Each Spider database schema is distributed with two parallel naming conventions for every table and column: an original name, corresponding to the actual identifier used in the underlying SQL database (for example, a column literally called uid), and a semantically friendlier name intended to be more human-readable (\texttt{airline\_id}) \citep{li2023}.
+
+This thesis matches all predictions and gold links against original names, Spider's \texttt{column\_names\_original} field rather than the friendlier alternative, for two reasons. First, it is the harder and more realistic target: a deployed system queries a real database, which exposes only its actual column identifiers, not a curated paraphrase.
+
+Second, and more specific to this thesis's design, it keeps both gold-standard tiers on the same representational footing. Tier 2 is extracted by parsing SQL text, which necessarily references a database's actual column names, so scoring Tier 1 against original names as well ensures both tiers describe correctness in the same terms rather than silently comparing apples to oranges. With the corpus and its naming conventions fixed, the question becomes what counts as a correct link within it.
+
+\section{Gold-Link Annotation Approaches}\label{sec:3-2}
+
+This thesis constructs its gold standard from two independent sources, referred to throughout as Tier 1 and Tier 2. They are deliberately kept as two separate, parallel gold standards rather than merged into a single set of links. Each represents a different, defensible answer to the question ``what counts as a correct schema link?'', and every method is evaluated against both.
+
+Figure~\ref{fig:3-5} shows what that difference amounts to on a single question, before either tier is defined formally. The question, its schema and its gold SQL are drawn as three stacked bands; blue arrows run down from the spans a human annotator marked, orange arrows up from the identifiers the gold SQL actually uses. Two columns are reached only from below. They are the join keys, and no correct query can be written without them but the question never names them.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image5}
+  \caption[Where each tier's links come from, on development question 22\ldots]{Where each tier's links come from, on development question 22 (\texttt{concert\_singer}). Blue arrows descend from the question's annotated spans Tier 1. Orange arrows ascend from the gold SQL's identifiers Tier 2. The two columns no blue arrow reaches, concert.\texttt{Stadium\_ID} and stadium.\texttt{Stadium\_ID}, are the whole reason this thesis keeps two tiers rather than one. Appendix C gives three further worked cases.}\label{fig:3-5}
+\end{figure}
+
+\subsection{Tier 1 (Mentioned): Human Annotations \citep{taniguchi2021}}\label{sec:3-2-1}
+
+Tier 1 answers the question ``which schema elements does the question's text actually mention?'' It is built from the human annotations released by \citet{taniguchi2021}. Two annotators familiar with SQL independently labeled character spans of each question in Spider's development set using the Doccano annotation tool, tagging each span with the specific table or table.column it referred to. Across the full annotated set, the average question carries 2.98 labels (1.18 table references and 1.79 column references, SD 1.23), with a maximum observed count of eight labels on a single question.
+
+Joining Taniguchi et al.'s released annotations to this thesis's own Spider-indexed data is not entirely mechanical, and the join logic is worth documenting rather than assuming. Taniguchi et al. distribute their 1,034 annotated examples as two files of 517 each, and each annotation carries its own question text rather than a Spider question ID. Matching primarily by exact question-text equality resolves 988 of the 1,034 annotations directly.
+
+The remaining 46 differ from Spider's own question field by typo fixes, punctuation, or whitespace that Taniguchi et al.'s own normalization introduced. For those 46, this thesis's data-loading code falls back to an empirically verified id-offset rule: Taniguchi's own annotation ids run contiguously from 3616 to 4649, and id \ensuremath{-} 3616 equals the corresponding Spider development row index. The alternative dropping the mismatched examples, or attempting a fuzzy text match that could silently mis-join a question to the wrong schema was rejected.
+
+Every fallback case is logged, and every resolved label is additionally validated against its target schema before being accepted. The join itself fails loudly, raising rather than silently truncating, if more than 1\% of labels fail that validation. That ceiling is never approached in practice, since this thesis's full annotated set resolves successfully.
+
+Two properties of this tier are worth stating explicitly, because they shape how it should be interpreted. First, ``mentioned'' is a property of the question's surface text, not of the SQL query's logic. A table or column that is genuinely required to answer the question but never referred to in its wording a foreign key needed purely to join two tables, for instance will not appear as a Tier 1 label, even though a correct SQL query cannot be written without it.
+
+Second, annotation coverage is limited to Spider's development split. \citet{taniguchi2021} did not annotate the training split, and the Spider test split's SQL is not public in the first place (Section~\ref{sec:3-1}).
+
+One implementation detail is worth noting alongside these. Taniguchi et al.'s own paper further re-splits its annotated development data into two internal halves of 517 examples each for its own experiments, a split specific to their paper, and not one this thesis adopts. This thesis's data-loading code draws on the full annotated development set, and confirming that full coverage against Taniguchi et al.'s public release is one of the verification steps of this thesis's own gold-standard construction pass.
+
+\subsection{Tier 2 (All-SQL-Used): sqlglot-Extracted Links}\label{sec:3-2-2}
+
+Tier 2 answers a different question: ``which schema elements does the gold SQL query actually reference?'' Rather than relying on human judgment about a question's wording, this tier is constructed automatically by parsing each example's gold SQL query with sqlglot (tobymao, 2024), a Python SQL parser and transpiler.
+
+The walk collects every table and column identifier the parsed query references, whether in its SELECT list, WHERE or HAVING conditions, JOIN ON clauses, or GROUP BY / ORDER BY expressions. Because this extraction operates on SQL text rather than question text, it requires no human annotation effort and can therefore be applied uniformly to both the training and development splits, unlike Tier 1. Figure~\ref{fig:3-6} shows the procedure end to end.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image6}
+  \caption[How one gold query becomes a set of Tier-2 links, worked on development\ldots]{How one gold query becomes a set of Tier-2 links, worked on development question 22. The same shared walk runs in a strict mode for gold extraction and in a deliberately more permissive mode for Method D (Section~\ref{sec:4-2-4}), so the two cannot silently drift apart in how they interpret SQL structure. The reject band lists what the walk discards and at which stage; nothing is dropped without being recorded.}\label{fig:3-6}
+\end{figure}
+
+Two implementation conventions, locked prior to construction, keep this extraction consistent across the codebase. Extracted references are resolved to Spider's \texttt{column\_names\_original} field, and stored as typed, immutable (frozen) records rather than raw strings or dictionaries, so that a gold link cannot be silently mutated once constructed.
+
+The wildcard column receives the same training-free treatment one level earlier than gold-link extraction. Spider represents SQL's * as a synthetic column at index 0 of its own column list with a sentinel table index, and this thesis's schema-parsing code excludes that synthetic column when it first builds each Schema object. The purpose is specific: no downstream consumer - linker, evaluator, or error-analysis code ever needs to special-case it again.
+
+The wildcard is correspondingly excluded from every extracted gold link and from every method's prediction alike, since it does not name a specific schema element and would otherwise inflate agreement artificially. The parsing logic itself lives in a single shared utility, used in a strict mode for gold extraction and reused in a deliberately more permissive mode by one of the schema-linking methods evaluated in Chapter 4.
+
+Tier 2 is only as trustworthy as the walk that produces it. The walk's behaviour on every construct Spider's gold SQL uses is pinned by unit tests and summarised in Table~\ref{tab:3-1}; the principle throughout is that a reference resolves to the underlying schema element rather than to its surface form.
+
+\begin{table}[htbp]
+\centering
+\caption{How the shared sqlglot walk resolves each SQL construct into a Tier-2 gold link. Every row is pinned by a unit test; the examples are live output against the \texttt{concert\_singer} schema.}\label{tab:3-1}
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.23\textwidth}>{\raggedright\arraybackslash}p{0.33\textwidth}>{\raggedright\arraybackslash}p{0.34\textwidth}@{}}
+\toprule
+\textbf{SQL construct} & \textbf{Example} & \textbf{Tier 2 records}\tabularnewline
+\midrule
+Aggregate & SUM(age),~MAX(age) & the inner column\tabularnewline
+Nested function & MAX(CAST(age AS INT)),~SUBSTR(name,1,3) & the inner column\tabularnewline
+Arithmetic expression & age * 2 & the inner column\tabularnewline
+Output alias & name AS n & the source column, not the alias\tabularnewline
+Wildcard & SELECT *,~COUNT(*) & no column; the table is still recorded\tabularnewline
+Table alias & FROM singer AS T1 & resolved to~singer\tabularnewline
+Self-join & players T1 JOIN players T2 & one table; set semantics dedupe\tabularnewline
+Subquery & in~FROM~and in~IN (\ldots) & descended into\tabularnewline
+Set operation & UNION,~INTERSECT,~EXCEPT & each branch visited separately\tabularnewline
+Common table expression & WITH c AS (\ldots) & CTE name excluded from the table set\tabularnewline
+Identifier casing & select NAME from SINGER & resolved to Spider's original casing\tabularnewline
+Unknown identifier & SELECT nope FROM singer & dropped, recorded as a parse issue\tabularnewline
+Unparseable SQL & & empty result plus a parse issue; never raises\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+Run over the corpus, the extraction resolves all 1,034 development queries to 2,809 columns without leaving a single schema reference unresolved. The 270 identifiers it declines are without exception double-quoted string literals. SQL reads double quotes as identifier quoting, but Spider uses them for values, and a value is not a schema element value linking is outside this thesis's scope (Section~\ref{sec:1-3}).
+
+The training split behaves identically, 99.7\% of its 1,949 declined identifiers being value literals of the same kind. One limitation remains: an unqualified column whose name occurs in more than one table of the same schema is resolved by a schema-wide candidate search that can attribute it to the wrong owner, a case 68 development questions (6.6\%) could in principle hit.
+
+Because Tier 1 and Tier 2 are constructed from entirely different signals question wording versus SQL logic, they are not expected to agree perfectly. The difference between them is itself informative. A method's rank ordering that is stable across both tiers is a stronger claim than one that holds only under a single tier's definition of correctness, which is precisely the comparison this design is intended to make.
+
+Figure~\ref{fig:3-7} gives the first measurement of that difference. Tier 2's column distribution sits a full column to the right of Tier 1's, though the gap is concentrated rather than uniform: 47\% of questions have no Tier-2-only column at all.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image7}
+  \caption[Gold columns per development question]{Gold columns per development question. (a) Tier 2's distribution sits a full column right of Tier 1's; (b) the Tier-2-only surplus, absent on 47\% of questions but reaching 7 on a few.}\label{fig:3-7}
+\end{figure}
+
+\section{What Tier 2 Contains}\label{sec:3-3}
+
+Section~\ref{sec:3-2-2} establishes how Tier 2 is built. Because it is a dataset this thesis constructs rather than inherits, its composition deserves reporting in its own right, the more so because Chapter~\ref{ch:5}'s central finding turns on which parts of it the methods fail to recover.
+
+The starting point is how far the two tiers overlap at all. Pooled across the development split, 1,709 of Tier 1's 1,767 columns are also in Tier 2, leaving just 58 that are not; Tier 2 adds a further 1,100 on top. At the table level the picture is entirely different: 1,477 links are shared, with only 33 unique to Tier 1 and 88 to Tier 2. Figure~\ref{fig:3-8} draws both.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image8}
+  \caption[Where the two gold tiers agree, and where they do not, pooled over the 1,034\ldots]{Where the two gold tiers agree, and where they do not, pooled over the 1,034 development questions. Circle areas are proportional to link counts and both panels share one scale. (a) At the column level Tier 1 is almost a subset of Tier 2, which adds 1,100 columns of its own. (b) At the table level the two are nearly the same set. The tier gap is therefore a column-level phenomenon, not a table-level one.}\label{fig:3-8}
+\end{figure}
+
+That asymmetry is the first substantive result of the chapter: the choice of tier barely matters for tables, and matters a great deal for columns. The rest of this section is concerned with the 1,100 columns of panel (a).
+
+Every Tier-2 column carries, from the same sqlglot walk that produced it, the set of SQL clauses in which it appears. Table~\ref{tab:3-2} reports the resulting composition of the 2,809 development columns, and of the 1,100 of them that Tier 1 does not contain.
+
+\begin{table}[htbp]
+\centering
+\caption{Tier-2 development columns by the clause they appear in. A column counted under ``multiple clauses'' is used in more than one, most often a column both selected and grouped by. The right-hand pair restricts the same breakdown to columns absent from Tier 1.}\label{tab:3-2}
+\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lllll@{}}
+\toprule
+\textbf{Clause role} & \textbf{All Tier-2 (n)} & \textbf{All Tier-2 (\%)} & \textbf{Absent from Tier 1 (n)} & \textbf{Absent from Tier 1 (\%)}\tabularnewline
+\midrule
+JOIN ON only & 823 & 29.3 & 785 & 71.4\tabularnewline
+SELECT only & 983 & 35.0 & 60 & 5.5\tabularnewline
+WHERE only & 484 & 17.2 & 127 & 11.5\tabularnewline
+ORDER BY only & 106 & 3.8 & 21 & 1.9\tabularnewline
+GROUP BY only & 6 & 0.2 & 2 & 0.2\tabularnewline
+HAVING only & 5 & 0.2 & 0 & 0.0\tabularnewline
+multiple clauses & 402 & 14.3 & 105 & 9.5\tabularnewline
+\textbf{Total} & \textbf{2,809} & \textbf{100} & \textbf{1,100} & \textbf{100}\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image9}
+  \caption[The same two distributions]{The same two distributions. Panel (a) is all 2,809 Tier-2 development columns; panel (b) is the 1,100 that Tier 1 does not record.}\label{fig:3-9}
+\end{figure}
+
+Three things follow, and each one bears on a claim made later in this thesis.
+
+First, Tier 2 is not merely Tier 1 plus join keys, and the difference is measurable. Join-only columns are 71.4\% of the surplus, not all of it. A further 54 columns appear in a JOIN ON and somewhere else, bringing the share that touches a join at all to 839 (76.3\%). That leaves 261 columns (23.7\%) that never appear in a join at any point, 127 used only in a WHERE, 60 only in a SELECT, 21 only in an ORDER BY.
+
+These are ordinary, non-structural columns that the gold SQL genuinely requires and that the human annotation simply did not mark. The distinction matters because the two groups have different causes. The join-only columns reflect a definitional difference between the tiers: Tier 1 records what a question mentions, and questions do not mention foreign keys. The 261 reflect incomplete annotation. Only the first is a property of the tier design; the second is a property of the annotation, and it is why Section~\ref{sec:5-5} forbids using the set difference Tier 2 minus Tier 1 as a proxy for ``join omission''.
+
+Second, join keys are a substantial fraction of Tier 2 overall, not a marginal one. 823 of 2,809 development columns 29.3\%, exist in the gold SQL for no purpose other than joining. Close to a third of what Tier 2 asks a linker to find is therefore invisible in the question's own wording.
+
+This is the quantity that makes the Tier-1/Tier-2 divergence of Section~\ref{sec:5-3} as large as it is. It explains why a method optimised against question wording (Method C) and a method optimised against a real query (Method D) can be thirty points apart on one tier and level on the other.
+
+Third, the divergence is concentrated, not spread evenly. 485 of the 1,034 development questions (46.9\%) have no Tier-2-only column at all, for nearly half the corpus, the two tiers agree exactly on columns. Of the remainder, 392 questions (37.9\%) contribute at least one join-only surplus column and 232 (22.4\%) at least one ordinary-clause surplus column.
+
+The concentration follows Spider's own difficulty axis closely. Averaged per question, the Tier-2-only surplus is 0.15 columns on easy queries, 1.00 on medium, 1.41 on hard and 2.23 on extra hard, a fifteen-fold spread across the four levels, rising monotonically. Figure~\ref{fig:3-10} plots it.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image10}
+  \caption[Gold columns per development question by Spider hardness]{Gold columns per development question by Spider hardness. (a) Both tiers, side by side, with the per-question Tier-2-only surplus annotated above each pair. (b) That surplus alone. Tier 1 is close to flat across the four levels while Tier 2 more than triples, so the gap between them is almost entirely a function of query difficulty.}\label{fig:3-10}
+\end{figure}
+
+The tier gap is therefore a property of a specific minority of harder, multi-table questions rather than a uniform offset. That is consistent with the clause distribution of Section~\ref{sec:3-1}, and it is worth carrying into Chapter~\ref{ch:5}: the hardness breakdowns in Tables 5.2 and 5.3 are measured against a gold standard whose own demands grow with hardness.
+
+The asymmetry runs in the other direction too, though far more weakly. 58 columns across 55 questions appear in Tier 1 but are never referenced by the gold SQL, elements a human annotator marked as mentioned that no correct query touches. Figure~\ref{fig:3-11} shows one such case. At the table level, Tier 2 adds 88 tables Tier 1 lacks (join bridges, overwhelmingly) and Tier 1 holds 33 that Tier 2 lacks.
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{image11}
+  \caption[The reverse asymmetry, on development question 6]{The reverse asymmetry, on development question 6. The annotator marked singer.Name as mentioned, but the gold SQL selects \texttt{Song\_Name} and orders by Age, and never touches Name at all. A method that recovers exactly what the query needs is still scored wrong against Tier 1 here.}\label{fig:3-11}
+\end{figure}
+
+These 58 columns are small in number but not in consequence. Section~\ref{sec:5-5} shows they become the single largest error source for the strongest methods, since a method that has correctly recovered everything the SQL needs can still be scored wrong against them.
+
+\section{Dataset Statistics and Splits}\label{sec:3-4}
+
+This section consolidates every dataset and gold-standard statistic this thesis has directly verified. Table~\ref{tab:3-3} covers the Spider corpus as this thesis's own pipeline actually loads it; Table~\ref{tab:3-4} covers the two gold-standard tiers built from it.
+
+\begin{table}[htbp]
+\centering
+\caption{Spider corpus statistics, as this thesis's own pipeline loads and computes them. ``166 databases'' is train + dev only; the 34 remaining databases belong to Spider's held-out test split, which this thesis never touches (Section~\ref{sec:3-1}).}\label{tab:3-3}
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.58\textwidth}>{\raggedright\arraybackslash}p{0.36\textwidth}@{}}
+\toprule
+\textbf{Quantity} & \textbf{Value}\tabularnewline
+\midrule
+Databases (full Spider benchmark) & 200\tabularnewline
+Databases (train + dev only, this thesis's pipeline) & 166\tabularnewline
+Domains & 138\tabularnewline
+Training examples (this thesis's pipeline) & 7,000\tabularnewline
+Training examples (Taniguchi et al.'s release) & 8,625\tabularnewline
+Development examples & 1,034\tabularnewline
+Test examples (not used - SQL not public) & 2,147\tabularnewline
+Mean tables per database (SD) & 5.28 (3.87)\tabularnewline
+Mean columns per database (SD) & 27.13 (30.80)\tabularnewline
+Largest schema & \texttt{baseball\_1} - 26 tables, 352 columns\tabularnewline
+Mean question length, dev (words / chars) & 12.43 / 68.05\tabularnewline
+Dev hardness: easy / medium / hard / extra & 248 / 446 / 174 / 166\tabularnewline
+Dev hardness, as a share of 1,034 & 24.0\% / 43.1\% / 16.8\% / 16.1\%\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+Table~\ref{tab:3-4} turns to the gold standard itself. One entry needs an explanation rather than a bare number. \citet{taniguchi2021} own paper reports 3,077 raw annotation labels (1,223 table, 1,854 column), but this thesis's own loaded and schema-validated Tier-1 set totals 3,277 links (1,510 table, 1,767 column), a different number from the same underlying annotations, not a competing or corrected one.
+
+The two mechanical steps that produce the difference both follow directly from the loading logic documented in Section~\ref{sec:3-2-1}. First, any table implied by a labelled column but never separately labelled as its own span is added to that question's table set, which is why the table count rises (1,223 to 1,510) without any new information being added. Second, labels are deduplicated and validated against each question's actual schema before being kept, which is why the column count falls slightly instead (1,854 to 1,767). Both figures describe the same 1,034 annotated questions; only the convention for counting a table differs.
+
+\begin{table}[htbp]
+\centering
+\caption{Gold-standard statistics for both tiers. *See the preceding paragraph: this figure differs from Taniguchi et al.'s own reported count by construction, not by disagreement or error. The two gap rows are per-question set differences, Tier 2 minus Tier 1; 1.06 \ensuremath{\times} 1,034 = 1,100, the surplus reported in Section~\ref{sec:3-3}.}\label{tab:3-4}
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.58\textwidth}>{\raggedright\arraybackslash}p{0.36\textwidth}@{}}
+\toprule
+\textbf{Quantity} & \textbf{Value}\tabularnewline
+\midrule
+Tier 1 inter-annotator agreement & \ensuremath{\kappa} = 0.764; F1 = 87.5\tabularnewline
+Tier 1 labels, Taniguchi et al.'s own count (table + column) & 3,077 (1,223 + 1,854)\tabularnewline
+Tier 1 links, this thesis's loaded set, dev (table + column) & 3,277 (1,510 + 1,767)*\tabularnewline
+Tier 1 gold mean, dev (tables / columns per question) & 1.46 / 1.71\tabularnewline
+Tier 2 gold total, dev (tables / columns) & 1,565 / 2,809\tabularnewline
+Tier 2 gold mean, dev (tables / columns per question) & 1.51 / 2.72\tabularnewline
+Tier 2 gold mean, train (tables / columns per question) & 1.55 / 2.88\tabularnewline
+Tier 1--Tier 2 gap, dev (mean extra tables / columns) & 0.09 / 1.06\tabularnewline
+Tier 1--Tier 2 gap, dev (max extra tables / columns, single question) & 3 / 7\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+With both gold-standard tiers, their composition and their canonical representation now defined, Chapter~\ref{ch:4} turns to the methodology: the formal problem definition, the six schema linking methods under comparison, the shared linker protocol they all implement, and the evaluation metrics computed against the gold standards defined here.

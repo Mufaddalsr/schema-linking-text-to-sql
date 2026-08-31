@@ -1,0 +1,47 @@
+\chapter{Discussion}\label{ch:6}
+
+Chapter~\ref{ch:5} established what each method does. This chapter asks what that means, taking the four key questions in turn: whether string matching or embeddings makes the better baseline (Section~\ref{sec:6-1}), whether the LLM-based methods justify their cost (Section~\ref{sec:6-2}), whether the graph method closes the gap it was built to close (Section~\ref{sec:6-3}), and what each family's characteristic failure says about where the remaining headroom is (Section~\ref{sec:6-4}).
+
+\section{String Matching versus Embeddings}\label{sec:6-1}
+
+Neither baseline dominates the other, and the difference is one of failure mode rather than overall quality. Embeddings win on tables (Tier-1 SRR 0.791 vs. 0.715, p \ensuremath{\approx} 1.4 \ensuremath{\times} 10\ensuremath{^{-5}}; Section~\ref{sec:5-4}) because table names are short, semantically loaded strings an encoder handles well. Lexical matching wins on columns (0.768 vs. 0.647, p \ensuremath{\approx} 8.1 \ensuremath{\times} 10\ensuremath{^{-12}}) but only by brute force: Method A predicts 4.49 columns per question at precision 0.403, effectively buying recall with false positives rather than winning on semantic quality.
+
+Their error profiles, reported in Table~\ref{tab:5-6}, are near-complements. Method A's failures are 35.2\% lexical mismatch: it has no way to connect a question's ``gender'' to a column named Sex. Method B's are 61.1\% under-linking, and Section~\ref{sec:5-5}'s second finding shows this is almost entirely top-k truncation of elements the encoder already scored correctly, rather than a semantic failure.
+
+A hybrid taking Method B's semantic matching and Method A's generosity at the retrieval stage is the obvious unexplored point between them, and is named explicitly in this thesis's future work (Section~\ref{sec:7-3}).
+
+\section{Do LLM Methods Win, and at What Cost?}\label{sec:6-2}
+
+Yes, decisively, and cheaply. Every LLM-based method beats every non-LLM baseline on every headline metric at p \textless{} 10\ensuremath{^{-30}} (Section~\ref{sec:5-4}). The gap is largest exactly where it matters most: on extra-hard questions under Tier 2, Method E holds 0.892 column SRR against Method B's 0.108 (Table~\ref{tab:5-2}).
+
+The more interesting result is which LLM method wins, and it is not the obvious one. Direct prompting (Method C) is the weakest of the three LLM-based methods on Tier 2. Backward parsing (Method D), which asks the model for SQL and then reads the links off it, wins Tier-2 columns outright at F1 = 0.939 against Method C's 0.815, for roughly half the cost (Section~\ref{sec:4-3-3}). The reason is structural: join keys are a property of a real query rather than something the model has to be told to remember.
+
+The union (Method E) buys the best recall in this study for no extra API calls, at a precision cost of roughly 8 points on Tier-1 columns.
+
+Cost turns out not to be a meaningful constraint at this scale. The complete LLM budget for this thesis was \$11.89 across 6,767 calls (Chapter~\ref{ch:4}), averaging roughly \$0.006 per question for the single most expensive method. Prompt caching was not enabled for these runs, so this figure is an unoptimized upper bound rather than a tuned minimum.
+
+At this price point, the relevant budget for a deployment decision is latency and vendor dependency rather than dollars. That reframes the ``death of schema linking'' debate this thesis's Sections 1.1 and 2.2 situate it against. \citet{maamari2024} argue the cost-benefit case for omitting schema linking turns on whether an imperfect linker's precision loss outweighs its safety value for a given model and schema size.
+
+This thesis's own cost data suggests that for a small model on Spider-scale schemas, the dollar cost of running a linker at all is not the variable doing the deciding. Which method is used, and in which direction it reasons, matters far more than whether one is run.
+
+\section{Does the Graph Method Close the Gap?}\label{sec:6-3}
+
+For tables, completely. Method G matches Method C on Tier-1 tables with no significant difference (6 : 2 discordant pairs, p = 0.29; Section~\ref{sec:5-4}), and does so with one deterministic model call per question instead of three sampled ones.
+
+Its endpoint model produced zero hallucinations across all 1,034 development queries, and it is the graph's foreign-key path search, not the model, that chooses the join tables, inserting an extra table on only 33 queries and usually correctly (Section~\ref{sec:5-2}). On Tier-1 columns, Method G posts the best precision (0.698) and F1 (0.757) of any method in this study, for \$1.93 in total (Chapter~\ref{ch:5}).
+
+For columns under Tier 2, no. Method G's columns still come from the same LLM endpoint call that names its core tables, and that call omits join keys exactly as Method C's forward prediction does. 67.5\% of Method G's failures are join omissions (Table~\ref{tab:5-6}), and its Tier-2 column SRR of 0.653 is statistically indistinguishable from the lexical baseline on extra-hard questions specifically (0.313 against Method A's 0.313; Table~\ref{tab:5-2}).
+
+The graph structure is used to find the join tables but never to emit the join columns, even though the foreign-key edges Method G already walks contain exactly the column pairs its predictions are missing. That claim can be measured. Of the 657 Tier-2 columns Method G fails to predict, 585 (89.0\%) lie on a foreign-key edge between two tables its own path search already walked, and 319 of the 359 affected questions (88.9\%) contain at least one such column. The information really is sitting in a structure the method builds anyway.
+
+Emitting them is a cheap change to make. Adding every foreign-key column on a walked edge, which needs no model call and no information the method does not already hold, raises Method G's Tier-2 column strict recall from 0.653 to 0.947 and its F1 from 0.808 to 0.885, at a precision cost of one thousandth. That would place it second of the six methods rather than fourth, behind only Method E. Under Tier 1 the same change costs precision (0.698 to 0.610), since Tier 1 does not record join keys at all, which is a further instance of the tier argument of Section~\ref{sec:5-3}.
+
+Closing that loop is therefore the clearest single improvement available in this study, and it is named first among this thesis's near-term future work (Section~\ref{sec:7-3}), precisely because the information is already sitting in a data structure the method builds anyway.
+
+\section{Dominant Error Categories}\label{sec:6-4}
+
+Table~\ref{tab:5-6} and Section~\ref{sec:5-5}'s three findings show that each method family fails in its own characteristic way, and none of the six failure profiles is well described as simply ``less accurate''.
+
+Method A's signature is lexical mismatch (35.2\%) then under-linking (25.3\%), with a distinctive wrong-table-copy pattern, a correctly named column predicted on the wrong table, on 300 of 1,034 queries. Method B's is under-linking (61.1\%), overwhelmingly rank truncation rather than semantic failure. Methods C and G share join omission (67.7\% and 67.5\%) as their dominant category, with the one-sided foreign-key pattern as its most common shape. Methods D and E share other or corpus error (40.2\% and 50.0\%) as theirs.
+
+Question hardness sharpens these profiles rather than changing them. Join omissions cluster heavily in the medium and extra-hard strata (330 of 941 and 223 of 588 coded cases there, against 13 of 180 on easy questions), which is where multi-table SQL actually lives; lexical mismatch, by contrast, is roughly flat across hardness, since a vocabulary gap between question and schema does not care how syntactically complex the resulting query is.

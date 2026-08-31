@@ -1,0 +1,74 @@
+%%
+%% Berliner Hochschule für Technik --  Abschlussarbeit
+%%
+%% Titelseiten und Erklärungen
+%%
+%% Angepasst:
+%%  * die eingeschobenen Leerseiten erscheinen nur in der Druckfassung
+%%    (\digitalfalse in main.tex)
+%%  * Zusammenfassung, Abstract und Aufgabenblatt sind auskommentiert
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\maketitle
+\clearpage
+
+\ifdigital\else
+  ~
+  \newpage                      % Rückseite der Titelseite (nur Druck)
+\fi
+
+%% Vorspann römisch numerieren; der Textteil beginnt in main.tex mit 1
+\pagenumbering{roman}
+
+%% --- entfernt; zum Reaktivieren die beiden Zeilen einkommentieren ---
+%\input{abstract_de.tex}
+%\input{abstract_en.tex}
+
+\input{acknowledgements.tex}
+
+%% --- Aufgabenblatt entfernt; zum Reaktivieren den Block einkommentieren ---
+%\ifthenelse{\boolean{@entwurfset}}
+%    {
+%
+%    }
+%    {
+%      \ifdigital\else ~ \newpage \fi
+%      \vfill
+%      \section*{Aufgabenblatt -- durch Original austauschen !!!}
+%      \vfill
+%      \clearpage
+%      \ifdigital\else ~ \newpage \fi
+%    }
+
+\vspace{10ex}
+\section*{Declaration of Authorship}
+I hereby declare that I have written this master's thesis independently and
+without any unauthorized external assistance. All sources and materials used
+have been fully and correctly acknowledged, and any passages quoted or
+paraphrased from other works have been clearly identified and cited.
+
+% \vspace{2ex}
+% Software tools such as Grammarly and QuillBot were used for grammar correction
+% and sentence structuring during the preparation of this manuscript.
+
+\vspace{12ex}
+
+\noindent
+\begin{minipage}[b]{0.45\textwidth}
+  \thedatum\\[1ex]
+  \hrule
+  \vspace{0.6ex}
+  {\small Date}
+\end{minipage}
+\hfill
+\begin{minipage}[b]{0.45\textwidth}
+  \theautor\\[1ex]
+  \hrule
+  \vspace{0.6ex}
+  {\small Signature}
+\end{minipage}
+
+\clearpage
+\tableofcontents
+\listoffigures
+\clearpage

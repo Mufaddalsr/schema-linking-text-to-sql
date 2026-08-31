@@ -1,0 +1,437 @@
+%%
+%%	BHT-Thesis.sty
+%%
+%%	Dokumentklasse fuer Abschlussarbeiten der Berliner Hochschule für Technik
+%%	S. Tschirley 2010
+%%
+%%      [v0.1 2010] initiale Version für Beuth Hochschule für Technik Berlin
+%%      [v2.0 2021] Anpassung anlässlich Namensänderung in 2021
+%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Identification
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{bhtThesis}[2021/08/26 v2.0 BHT Abschlussarbeit-Style]
+\message{2021/08/26 v2.0 BHT-Thesis-Style, S. Tschirley, tschirley@bht-berlin.de}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Einbinden aller benoetigten Pakete
+\RequirePackage{ifthen,ifluatex,ifpdf} 
+\RequirePackage{graphicx}                         %% Einbinden von Grafiken
+\RequirePackage{array, tabularx}                  %% Tabellenerweiterungen
+\RequirePackage{multicol}                         %% dto.
+\RequirePackage{xcolor}                           %% Farbgebung im Text
+\RequirePackage[xcolor]{changebar}                %% Changebars am Rand
+
+\RequirePackage{siunitx}                          %% physikalische Einheiten beim Namen nennen
+
+
+%% Eingabe
+\RequirePackage[utf8]{inputenc}
+\RequirePackage[ngermanb]{babel}
+\RequirePackage{ae,pifont}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Standardschriftart für den Text festlegen
+%%
+%% Hier ist auszuwählen, welche Schriftfamilie bevorzugt wird.
+%% Es gibt vorgefertigte Pakete, die aber nicht immer Teil
+%% jeder Distribution sind, auch die Schriften sind teilweise n
+%% unheberrechtlich geschützt und nicht in  allen Betriebssystemen
+%% vorhanden.
+%%
+%% lualatex kann OTF-Schrifetn verarbeiten, wenn vorhanden kann
+%% die Hausschrift BHT Case Text verwendet werden. Diese kann über
+%% die Hochschule bezogen werden. Ggf. muss dann der mathematische
+%% Zeichensatz angepasst werden
+%%
+%% Wird pdflatex verwendet, so wird das Paket libertine verwendet,
+%% mit Linuix Biolinum als Schrif, ggf. auch ohne Serfen
+
+\ifluatex
+  \RequirePackage{fontspec}
+  \setmainfont{BHTCaseText}
+  \fontspec{BHTCaseText}
+\else
+  \RequirePackage{libertine}
+%%\renewcommand*\familydefault{\sfdefault}  % Hauptschrift ohne Serifen
+  \renewcommand*\oldstylenums[1]{{\fontfamily{fxlj}\selectfont #1}}
+  \RequirePackage[T1]{fontenc}
+  \RequirePackage[scaled=0.83]{beramono}
+  %% andere Pakete, nur eines auswählen ! 
+  %%\RequirePackage{times}                            %% Standardfont: Times (PS)
+  %%\RequirePackage{utopia}                         %% Standardfont: Utopia
+  %%\RequirePackage{arial}
+  %%\RequirePackage{helvetica}
+  %%\RequirePackaga{palatino}
+  \fi
+
+%% Mathematik
+\RequirePackage{amssymb, amsmath}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Variablendefinition und deren Voreinstellung festlegen
+%
+
+\newcommand{\version}[1]{\setboolean{@versionset}{true} 
+  \renewcommand{\theversion}{#1}} 
+\newcommand{\datum}[1]{\renewcommand{\thedatum}{#1}}
+\newcommand{\autor}[1]{\renewcommand{\theautor}{#1}}
+\newcommand{\edvnr}[1]{\renewcommand{\theedvnr}{#1}}
+\newcommand{\titel}[1]{\renewcommand{\thetitel}{#1}}
+\newcommand{\untertitel}[1]{\renewcommand{\theuntertitel}{#1}}
+\newcommand{\fachbereich}[1]{\renewcommand{\thefachbereich}{#1}}
+\newcommand{\studiengang}[1]{\renewcommand{\thestudiengang}{#1}}
+\newcommand{\thesistyp}[1]{\renewcommand{\thethesistyp}{#1}}
+\newcommand{\betreuerFeld}[1]{\renewcommand{\thebetreuerFeld}{#1}}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Farbdefinitionen
+\xdefinecolor{bhtGray}{rgb}{0.333, 0.333, 0.333}     % BHT Dark Gray, Logo, Texxt
+\xdefinecolor{bhtTurquoise}{rgb}{0, 0.627, 0.666}    % BHT Turquoise
+\xdefinecolor{bhtCyan}{rgb}{0, 0.627, 0.666}         % BHT Turquoise  
+\xdefinecolor{bhtYellow}{rgb}{1, 0.788, 0}           % BHT Yellow (vivid orange)
+\xdefinecolor{bhtRed}{rgb}{0.918, 0.231, 0.025}      % BHT Rot (vivid red)
+\xdefinecolor{bhtBlue}{rgb}{0, 0.259, 0.510}         % BHT Dunkelblau (darkblue)
+\newcommand{\headcolor}{bhtBlue}
+\newcommand{\alertcolor}{bhtRed}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Internals
+\newcommand{\theversion}{0.0}      
+\newcommand{\thedatum}{\today}
+\newcommand{\theautor}{Autor angeben!}
+\newcommand{\theedvnr}{123 456}
+\newcommand{\thetitel}{Titel angeben!}
+\newcommand{\theuntertitel}{}
+\newcommand{\thefachbereich}{Fachbereich angeben}
+\newcommand{\thestudiengang}{Studiengang angeben}
+\newcommand{\thethesistyp}{Bachelorarbeit}
+\newcommand{\theabschluss}{Bachelor of Engineering (B.Eng.)}
+\newcommand{\thebetreuerFeld}{}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Variablen
+\newboolean{@pdfused}           \setboolean{@pdfused}{false}
+\newboolean{@entwurfset}        \setboolean{@entwurfset}{true}
+\newboolean{@abgabeset}         \setboolean{@abgabeset}{true}
+\newboolean{@versionset}        \setboolean{@versionset}{true}
+\newboolean{@versionsdatum}      \setboolean{@versionsdatum}{true}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PDF output oder DVI output erkennen
+%
+%% \newif\ifpdf
+%% \ifx\pdfoutput\undefined
+%%   \pdffalse % we are not running PDFLaTeX
+%%   \message{BHT style for LaTeX is used.}
+%%   \setboolean{@pdfused}{false}
+%% \else
+%%   \pdfoutput=1 % we are running PDFLaTeX
+%%   \pdftrue
+%%   \message{BHT style for pdfLaTeX is used}
+%%   \setboolean{@pdfused}{true}
+%% \fi
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Geometrisches ...
+\setlength\paperheight     {297mm}
+\setlength\paperwidth  	   {210mm}
+\setlength\headheight      {2ex}
+\setlength\headsep         {2ex}
+\setlength\footskip        {25\p@}
+\setlength\textwidth       {150mm}
+\setlength\textheight      {245mm}
+\setlength{\@tempdima}     {\paperwidth}
+\addtolength{\@tempdima}   {-2in}
+\addtolength{\@tempdima}   {-\textwidth}
+\setlength\oddsidemargin   {0.5\@tempdima}
+\setlength\evensidemargin  {\oddsidemargin}
+\setlength{\@tempdima}     {\paperheight}
+\addtolength{\@tempdima}   {-3in}
+\addtolength{\@tempdima}   {-\textheight}
+\setlength\topmargin       {.5\@tempdima}
+\setlength\footnotesep     {12\p@}
+\setlength{\skip\footins}  {10\p@ \@plus 2\p@ \@minus 4\p@}
+\setlength{\marginparsep}  {1pt}
+\setlength{\marginparwidth}{20mm}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Seitenlayout
+\RequirePackage{fancyhdr}
+
+\renewcommand{\footrulewidth}{0.4pt}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\lhead[\thepage]{\slshape \rightmark}
+\chead{}
+\rhead[\slshape \leftmark]{\thepage}
+\lfoot[]{}
+\cfoot{}
+\rfoot[]{}
+
+
+\fancypagestyle{plain}{%
+  \fancyhf{} %
+  \renewcommand{\footrulewidth}{0.4pt}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+\headheight=14pt	%% Unterdr"ucken von Overfull \vbox (1.59999pt too high) has.. 
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Optionen
+
+\DeclareOption{entwurf}
+    {
+      \setboolean{@entwurfset}{true}
+      \setboolean{@abgabeset}{false}
+    }
+
+\DeclareOption{abgabe}
+    {
+      \setboolean{@entwurfset}{false}
+      \setboolean{@abgabeset}{true}
+    }
+
+
+
+%% Setzen des defaults und verarbeiten
+\ExecuteOptions{entwurf}
+\ProcessOptions 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Kommandos
+\renewcommand{\maketitle}{\bhtTitelSeiteNeu}
+%\renewcommand{\maketitle}{\bhtTitelSeiteNeu} %% klassische Titelseite
+
+%% Text als Neu markieren
+\cbcolor{bhtRed}
+\ifthenelse{\boolean{@entwurfset}}
+    {
+      \newenvironment{neu}
+          {{\textcolor{bhtRed}{\textbf{NEU}}}
+            \cbstart[1mm]
+          }
+          {
+            \cbend
+          }
+    }
+    {
+      \newenvironment{neu}{}{}
+    }
+
+%% kurze Randsnotiz mit Text 
+\ifthenelse{\boolean{@entwurfset}}
+    {
+      \newcommand{\anno}[1]	                %% kurze Randnotiz mit Text
+	  {\marginpar{\textcolor{bhtRed}{
+		{\LARGE\ding{46}}\\%
+		{\begin{scriptsize}\begin{sf}%
+		      \slshape %
+		      #1%
+		\end{sf}\end{scriptsize}}
+	  }}}
+    }
+    {
+      \newcommand{\anno}[1]{}
+    }
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Start des Dokuments
+\AtBeginDocument
+    {
+      \ifthenelse{\boolean{@entwurfset}}
+          { 
+            \RequirePackage{draftwatermark}
+            \SetWatermarkText{Entwurf}
+            \SetWatermarkLightness{0.9}
+            \SetWatermarkFontSize{3cm}
+            \SetWatermarkAngle{45}  
+          }
+          {
+            % nüscht
+          }
+    }
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% User Macros 
+
+
+\newcommand{\hslogoH}{BHT-Logo-horizontal.pdf}
+\newcommand{\hslogoV}{BHT-Logo-vertikal.pdf}
+\newcommand{\hslogoHscaled}[1]{{\mbox{\includegraphics[width=#1]\hslogoH}}}
+\newcommand{\hslogoVscaled}[1]{{\mbox{\includegraphics[width=#1]\hslogoV}}}
+
+%% falls gewuenscht kann hier die BHT Case eingebunden werden
+
+\ifluatex
+  \newcommand{\hsfont}    {\fontseries{m}\fontshape{n}\selectfont}
+  \newcommand{\hsheadfont}{\fontseries{b}\fontshape{n}\selectfont}
+\else
+  \newcommand{\hsfont}    {\fontfamily{phv}\fontseries{m}\fontshape{n}\selectfont}
+  \newcommand{\hsheadfont}{\fontfamily{phv}\fontseries{b}\fontshape{n}\selectfont}
+\fi
+
+\newcommand{\bhtTitelSeiteNeu}
+    {
+      \thispagestyle{empty}
+      \parindent=0pt
+      %%
+      \begin{minipage}[b]{0.75\textwidth}
+        ~\\\vspace{10ex}
+        
+        \begin{hsheadfont}
+          \textcolor{\headcolor}{\LARGE \thetitel}\\[2ex]
+        \textcolor{\headcolor}{\Large\theuntertitel}
+        \end{hsheadfont}       
+      \end{minipage}
+      \begin{minipage}[b]{0.25\textwidth}
+        \raggedleft
+        \includegraphics[width=0.6\textwidth]{\hslogoV}
+      \end{minipage}
+      \vfill
+      %%
+      \begin{minipage}[b]{0.8\textwidth}
+        \begin{hsfont}
+          vorgelegt von\\[2ex]
+          {\Large\theautor}\\[2ex]
+          EDV.Nr.:\theedvnr\\[2ex]
+          dem Fachbereich \thefachbereich\\
+          der Berliner Hochschule für Technik Berlin\\
+          vorgelegte \thethesistyp\xspace \\
+          zur Erlangung des akademischen Grades\\[1ex]
+          \textbf{\theabschluss}\\[1ex]
+          im Studiengang\\[1ex]
+          \textbf{\thestudiengang}  \\[5ex]                
+          Tag der Abgabe \thedatum 
+        \end{hsfont}
+      \end{minipage}
+      \hfill
+      \begin{minipage}[b]{0.1\textwidth}
+        \centering
+        \includegraphics[scale=1]{BHT-Elements}\\[30ex]
+      \end{minipage}
+      \vfill
+      %%
+     \begin{minipage}[b]{0.7\textwidth}
+        \ifthenelse{\boolean{@entwurfset}}
+            {
+              \begin{hsfont}
+                \begin{tiny}
+                  \raggedright
+                  % Versionsnummer, wenn gesetzt
+                  \ifthenelse{\boolean{@versionset}}
+                       {Version \theversion\\}
+                       {}
+                       % Datum der letzten Änderung, falls gewünscht
+	               \ifthenelse{\boolean{@versionsdatum}}
+                       {letzte Änderung: \today \\}
+		       {}
+                \end{tiny}
+              \end{hsfont}
+              \vfill~
+            }
+            {              
+              % leer
+              ~\hfill~
+            }
+            
+            \hspace{-1.5ex}\hsfont{\thebetreuerFeld}
+      \end{minipage}
+      \hfill
+      \begin{minipage}[b]{0.1\textwidth}
+        \centering
+        \includegraphics[scale=1.4]{BHT-Studiere-vertikal}
+      \end{minipage}
+    }
+    
+    
+    
+\newcommand{\bhtTitelSeite}
+    {
+      \thispagestyle{empty}
+      \parindent=0pt
+      \begin{minipage}[b]{0.6\textwidth}
+       
+        \ifthenelse{\boolean{@entwurfset}}
+            {
+              \begin{hsfont}
+                \begin{tiny}
+                  \raggedright
+                  % Versionsnummer, wenn gesetzt
+                  \ifthenelse{\boolean{@versionset}}
+                       {Version \theversion\\}
+                       {}
+                       % Datum der letzten Änderung, falls gewünscht
+	               \ifthenelse{\boolean{@versionsdatum}}
+                       {letzte Änderung: \today \\}
+		       {}
+                \end{tiny}
+              \end{hsfont}
+            }
+            {              
+              % leer
+              ~\hfill~
+            }
+      \end{minipage}
+      \begin{minipage}[b]{0.4\textwidth}
+        \hslogoHscaled{\textwidth}
+      \end{minipage}
+
+      \textcolor{bhtBlue}{\rule{\linewidth}{0.5mm}}
+      \vspace*{\stretch{1}}
+      \begin{center}
+        \begin{hsheadfont}
+          \textcolor{\headcolor}{\huge \textbf{\thetitel}}
+        \end{hsheadfont}
+      \end{center}
+      \vspace*{\stretch{0.5}}
+      %
+      \begin{hsheadfont}
+        \begin{center}
+          \Large{\theuntertitel}
+        \end{center}
+      \end{hsheadfont}
+      \vspace*{\stretch{0.5}}
+      %
+      \begin{center}
+        \begin{hsfont}
+          vorgelegt von\\[2ex]
+          {\Large\theautor}\\[2ex]
+          EDV.Nr.:\theedvnr\\[2ex]
+          dem Fachbereich \thefachbereich\\
+          der Berliner Hochschule für Technik Berlin
+          vorgelegte \thethesistyp\xspace \\
+          zur Erlangung des akademischen Grades\\
+          \textbf{\theabschluss}\\
+          im Studiengang\\
+          \textbf{\thestudiengang}
+        \end{hsfont}
+      \end{center}
+     
+      \vspace*{\stretch{1}}
+       \begin{center}
+         Tag der Abgabe \thedatum 
+       \end{center}
+         
+      \vspace*{\stretch{1}}
+      
+      \thebetreuerFeld
+      
+      %
+      \vspace*{\stretch{2}}
+
+      \textcolor{bhtBlue}{\rule{\linewidth}{.5mm}}\\[1.5ex]
+       \begin{hsheadfont}
+         % leer
+         ~\hfill~
+       \end{hsheadfont}
+    }
+

@@ -1,0 +1,147 @@
+%%%% Berliner Hochschule fuer Technik -- Abschlussarbeit
+%%%% Hauptdokument -- aus thesis_draft_v1.docx konvertiert
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%% ---------------------------------------------------------------
+%%%% Ausgabeformat waehlen: Digitalfassung ODER Druckfassung
+%%%% ---------------------------------------------------------------
+%%%% Digitalfassung -- einseitig, keine eingeschobenen Leerseiten:
+\documentclass[11pt, a4paper, english, oneside]{book}
+\newif\ifdigital \digitaltrue
+%%%%
+%%%% Druckfassung -- doppelseitig, Kapitel beginnen rechts:
+%%\documentclass[11pt, a4paper, english, twoside, openright]{book}
+%%\newif\ifdigital \digitalfalse
+%%\usepackage[entwurf]{bhtThesis}   %% Entwurfsfassung
+\usepackage[abgabe]{bhtThesis}      %% Abgabefassung
+
+%%%% von der Word-Konvertierung benoetigt
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{placeins}
+%% Gleitobjekte auf reinen Float-Seiten oben statt vertikal zentriert setzen
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@fpsep}{14pt plus 1fil}
+\setlength{\@fpbot}{0pt plus 1fil}
+\makeatother
+%% eher Text mit auf die Seite nehmen, statt eine ganze Float-Seite zu oeffnen
+\renewcommand{\topfraction}{0.88}
+\renewcommand{\bottomfraction}{0.6}
+\renewcommand{\textfraction}{0.10}
+\renewcommand{\floatpagefraction}{0.80}   %% \FloatBarrier vor jeder longtable
+\usepackage[round,authoryear]{natbib}
+%% Die mitgelieferte myapalike.bst ist deutschsprachig ("und", "Seiten")
+%% und nicht natbib-kompatibel; plainnat liefert englische Autor-Jahr-Zitate.
+%% Zum Zurueckschalten: \bibliographystyle{myapalike} und \citep -> \cite.
+\usepackage{listings}
+%% Darstellung von Code-/Prompt-Bloecken im Anhang
+\lstdefinestyle{thesisblock}{
+  basicstyle       = \ttfamily\footnotesize,
+  breaklines       = true,
+  breakautoindent  = true,
+  columns          = fullflexible,
+  keepspaces       = true,
+  frame            = single,
+  rulecolor        = \color{black!35},
+  backgroundcolor  = \color{black!4},
+  framesep         = 6pt,
+  xleftmargin      = 1em,
+  xrightmargin     = 1em,
+  aboveskip        = 1.4ex,
+  belowskip        = 1.2ex,
+  captionpos       = b,
+  showstringspaces = false,
+  literate={ä}{{\"a}}1 {ö}{{\"o}}1 {ü}{{\"u}}1
+           {Ä}{{\"A}}1 {Ö}{{\"O}}1 {Ü}{{\"U}}1 {ß}{{\ss}}1,
+}
+\lstset{style=thesisblock}
+\renewcommand{\lstlistingname}{Listing}
+\usepackage{url}
+\usepackage{xspace}
+\providecommand{\tightlist}{%%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+\graphicspath{
+  {pictures/},
+  {kapitel1/pictures/},
+  {kapitel2/pictures/},
+  {kapitel3/pictures/},
+  {kapitel4/pictures/},
+  {kapitel5/pictures/},
+  {kapitel6/pictures/},
+  {kapitel7/pictures/},
+}
+
+\input{personalMacros.tex}
+%% Englische Titelseite (ueberschreibt \bhtTitelSeiteNeu aus bhtThesis.sty)
+\input{titlepage-en.tex}
+
+\thesistyp{Master's Thesis}
+\version{1.0}
+\datum{1\textsuperscript{st} September 2026}
+
+\fachbereich{VI -- Informatik \& Medien}
+\studiengang{Data Science}
+\renewcommand{\theabschluss}{Master of Science (M.Sc.)}
+\autor{Mufaddal Ragib}
+\edvnr{102163}
+\titel{Investigations into Schema Linking in Text-to-SQL}
+\untertitel{--- A Comparative Evaluation of Six Schema Linking Methods on
+  the Spider Dataset}
+\betreuerFeld{
+  \begin{tabular}{lr}
+    \multicolumn{2}{l}{\textbf{Supervisors}}\\
+    1.~Prof.~Dr.~Patrick Erdelt & Berliner Hochschule f\"ur Technik\\
+    2.~Prof.~Dr.~Steffen Wagner & Berliner Hochschule f\"ur Technik
+  \end{tabular}
+}
+
+%% hyperref zuletzt laden: macht Inhaltsverzeichnis, Abbildungsverzeichnis,
+%% Querverweise und Zitate anklickbar und legt PDF-Lesezeichen an.
+%% "hidelinks" laesst das Druckbild unveraendert; fuer farbige Links stattdessen:
+%% \usepackage[colorlinks,linkcolor=bhtBlue,citecolor=bhtBlue,urlcolor=bhtBlue]{hyperref}
+\usepackage[hidelinks,bookmarks=true,bookmarksnumbered=true]{hyperref}
+%% literale Strings, damit hyperref keine Makros expandieren muss
+\hypersetup{pdftitle={Investigations into Schema Linking in Text-to-SQL},
+            pdfauthor={Mufaddal Ragib},
+            pdfsubject={Master's Thesis, Data Science (M.Sc.), BHT Berlin},
+            bookmarksopen=true, bookmarksopenlevel=1}
+
+%% Fussnoten nicht ueber einen Seitenumbruch hinweg aufteilen
+\interfootnotelinepenalty=10000
+
+\begin{document}
+\selectlanguage{english}
+%% "Bibliography" -> "References" (nach \selectlanguage, sonst
+%% ueberschreibt babel den Namen wieder)
+\renewcommand{\bibname}{References}
+\pagestyle{fancy}
+
+\input{titelseiten.tex}
+
+\pagenumbering{arabic}
+
+%% Groesserer Absatzabstand ab Kapitel 1 (Vorspann bleibt unberuehrt)
+\setlength{\parskip}{1.5ex plus 0.4ex minus 0.2ex}
+\setlength{\parindent}{0pt}
+
+\input{kapitel1/ch1.tex}
+\input{kapitel2/ch2.tex}
+\input{kapitel3/ch3.tex}
+\input{kapitel4/ch4.tex}
+\input{kapitel5/ch5.tex}
+\input{kapitel6/ch6.tex}
+\input{kapitel7/ch7.tex}
+
+%% Literaturverzeichnis zuerst, danach der Anhang
+\clearpage
+\phantomsection
+\addcontentsline{toc}{chapter}{\bibname}
+\bibliographystyle{plainnat}
+\bibliography{bhtThesis}
+
+\begin{appendix}
+  \input{anhang.tex}
+\end{appendix}
+
+\end{document}
