@@ -153,8 +153,7 @@ class ErrorAnalysisConfig:
     Notes
     -----
     The two thresholds are swept in ``err_threshold_sweep.csv``; the values
-    committed here are the chosen operating point. See
-    ``docs/error_analysis_design.md`` §7.2.
+    committed here are the chosen operating point.
     """
 
     lexical_threshold: int = _ERROR_ANALYSIS_LEXICAL_THRESHOLD_DEFAULT

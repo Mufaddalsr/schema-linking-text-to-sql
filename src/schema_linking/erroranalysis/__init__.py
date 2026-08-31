@@ -1,6 +1,6 @@
 """Census-based error analysis for schema linking.
 
-See ``docs/error_analysis_design.md`` for the protocol this implements.
+Implements the census-based error-analysis protocol described in the thesis.
 """
 
 from schema_linking.erroranalysis.taxonomy import (
