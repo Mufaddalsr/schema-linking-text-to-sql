@@ -1,8 +1,7 @@
 """Fixed few-shot example selection for LLM forward prompting (Method C).
 
-Locked strategy — see ``docs/decisions.md`` ("Few-shot selection strategy,
-Method C, LLM forward") for the full rationale: two hand-picked structural
-patterns from Spider train (SIMPLE, MULTI_TABLE), not retrieval-based.
+Locked strategy: two hand-picked structural patterns from Spider train
+(SIMPLE, MULTI_TABLE), not retrieval-based.
 """
 
 from __future__ import annotations
@@ -234,8 +233,8 @@ def to_graph_fewshot_examples(
     (Method F, ``GRAPH_ENDPOINT_V1``), renaming ``tables`` to ``core_tables``.
 
     Tier-1 ("Mentioned") gold already excludes join-bridge-only tables and
-    columns (see ``docs/scope.md`` §4), so every table in a Tier-1
-    few-shot's ``tables`` list is already a core/endpoint table — no
+    columns, so every table in a Tier-1 few-shot's ``tables`` list is
+    already a core/endpoint table — no
     filtering is needed, only the key rename the graph prompt expects.
 
     Parameters

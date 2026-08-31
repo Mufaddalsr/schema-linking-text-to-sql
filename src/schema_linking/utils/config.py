@@ -89,9 +89,8 @@ class TunedEmbeddingConfig:
     """Grid-search-selected top-k/threshold knobs for ``EmbeddingLinker``.
 
     Produced by ``notebooks/05_embedding_tuning.ipynb`` /
-    :func:`schema_linking.utils.tuning.tune_embedding`; see
-    ``docs/decisions.md`` for the chosen values and the sweep that picked
-    them.
+    :func:`schema_linking.utils.tuning.tune_embedding`, which records the
+    chosen values and the sweep that picked them.
     """
 
     table_top_k: int

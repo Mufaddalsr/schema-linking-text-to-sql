@@ -1,7 +1,7 @@
 """Sentence-embedding encoder for schema elements (Method B).
 
-Rendering rules (locked in ``docs/decisions.md``)
---------------------------------------------------
+Rendering rules (locked)
+------------------------
 Text fed to the encoder uses Spider's human-readable names, not the
 DB-canonical (``original_name``) identifiers — natural-language phrases
 embed better with a sentence model than snake_case/camelCase identifiers:

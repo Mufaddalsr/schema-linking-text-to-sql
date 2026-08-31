@@ -94,8 +94,8 @@ def per_query_metrics(
         ``gold ⊆ predicted``); ``predicted_count``, ``gold_count``
         (ints).
 
-    Edge cases (locked, see ``docs/decisions.md``)
-    ---------------------------------------------
+    Edge cases (locked)
+    -------------------
     * ``predicted = ∅``, ``gold = ∅`` → ``P = R = F1 = 1.0``,
       ``srr_hit = True`` (vacuously correct).
     * ``predicted = ∅``, ``gold ≠ ∅`` → ``P = 1.0`` (no false
@@ -280,7 +280,7 @@ def filter_hallucinated(
 
 @dataclass(frozen=True, slots=True)
 class EvalResult:
-    """Output of :func:`evaluate`. See ``docs/decisions.md`` for the column
+    """Output of :func:`evaluate`. See :func:`evaluate` for the column
     schemas of both frames."""
 
     aggregated: pd.DataFrame
@@ -312,9 +312,6 @@ def evaluate(
     tier_name: str,
 ) -> EvalResult:
     """Evaluate a prediction file against a gold file.
-
-    See ``docs/decisions.md`` for the output contract (aggregated and
-    per-query column schemas, aggregation rules, robustness rules).
 
     Parameters
     ----------

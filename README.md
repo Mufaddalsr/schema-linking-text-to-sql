@@ -1,9 +1,10 @@
 # Schema Linking Thesis — `code/`
 
 Implementation of the six schema-linking methods compared in the thesis
-"Investigations into Schema Linking in Text-to-SQL". Scope and the
-twelve-week plan live in [`docs/scope.md`](docs/scope.md). Implementation
-decisions and gotchas live in [`docs/decisions.md`](docs/decisions.md).
+"Investigations into Schema Linking in Text-to-SQL". Scope, the
+twelve-week plan, and the implementation decisions behind each method are
+documented in the thesis itself; this repository holds the code,
+predictions, and results.
 
 ## Layout
 
@@ -29,8 +30,8 @@ config.yaml               paths configurable from one place
   Taniguchi et al.'s human Tier-1 character-span annotations. Two
   517-example halves of Spider dev (jointly 1034); their `.txt` siblings
   are BIO-tagged token sequences derived from the same data and are
-  unused here. See `taniguchi_loader.py` and `docs/decisions.md` for the
-  span-to-`(table, column)` resolution.
+  unused here. See `taniguchi_loader.py` for the span-to-`(table, column)`
+  resolution.
 
 ### Processed gold-link files
 
@@ -54,8 +55,8 @@ to Taniguchi's contiguous `id - 3616 = qid` for the 46/1034 cases where
 Taniguchi normalised typos / whitespace).
 
 Train has no Taniguchi annotations and never contributes to reported
-numbers — per [`docs/scope.md`](docs/scope.md), train is for threshold
-tuning, few-shot selection, and sanity-only. sqlglot is the only Tier-1
+numbers — by design, train is for threshold tuning, few-shot selection,
+and sanity-only. sqlglot is the only Tier-1
 source on train and that's fine.
 
 ### Cross-validation of the two Tier-1 sources

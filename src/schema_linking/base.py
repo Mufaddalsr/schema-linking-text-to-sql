@@ -14,7 +14,7 @@ Hashable predictions
 --------------------
 Sequence fields are stored as tuples (not lists) so that :class:`Prediction`
 remains hashable. The :func:`to_json` helper converts tuples back to lists
-to match the cross-tier JSON shape documented in ``docs/scope.md`` §4:
+to match the cross-tier JSON shape:
 ``{db_id, tables: [str], columns: [[table, col]]}``.
 """
 

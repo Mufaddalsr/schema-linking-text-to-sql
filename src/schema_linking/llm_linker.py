@@ -3,8 +3,8 @@
 Prompts an LLM with the full rendered schema and question, samples
 ``k_samples`` times at the configured temperature (self-consistency), and
 aggregates the parsed per-sample predictions by vote threshold. See
-``docs/scope.md`` Method C and ``docs/decisions.md`` for prompt/few-shot
-design decisions.
+:mod:`schema_linking.utils.prompts` and :mod:`schema_linking.utils.fewshot`
+for the prompt and few-shot design.
 
 Hallucination policy
 ---------------------
@@ -362,9 +362,8 @@ class LLMBackwardLinker:
     """LLM backward schema linker (Method D) — question -> SQL -> schema references.
 
     Prompts an LLM to generate a single SQL query for the question (no
-    self-consistency — one deterministic call per question, per
-    ``docs/decisions.md``), then resolves the generated SQL's table/column
-    references against the real schema via
+    self-consistency — one deterministic call per question), then resolves
+    the generated SQL's table/column references against the real schema via
     :func:`schema_linking.utils.sql_parsing.extract_schema_references` with
     ``strict=False`` — a hallucinated table/column is a valid Method D
     prediction (see that module's docstring), not something to filter out.
@@ -383,12 +382,12 @@ class LLMBackwardLinker:
         — same convention as :class:`LLMForwardLinker`'s ``few_shot``). Pass
         ``[]`` for zero-shot.
     k_samples
-        Locked at ``1`` per ``docs/decisions.md`` — Method D takes a single
-        deterministic call, no self-consistency sampling. Present for
+        Locked at ``1``. Method D takes a single deterministic call, no
+        self-consistency sampling. Present for
         interface parity with :class:`LLMForwardLinker`; any other value
         raises ``ValueError``.
     temperature_override
-        Locked at ``0.0`` per ``docs/decisions.md``. When not ``None``,
+        Locked at ``0.0``. When not ``None``,
         ``llm_client.temperature`` is temporarily swapped to this value for
         the duration of the call (and restored afterwards) — so a shared
         client configured for Method C's self-consistency temperature can
@@ -426,7 +425,7 @@ class LLMBackwardLinker:
         if k_samples != 1:
             raise ValueError(
                 "LLMBackwardLinker.k_samples is locked at 1 (no self-consistency "
-                f"sampling for Method D — see docs/decisions.md), got {k_samples}"
+                f"sampling for Method D), got {k_samples}"
             )
         self.llm_client = llm_client
         self.prompt = prompt
